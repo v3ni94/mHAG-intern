@@ -125,9 +125,10 @@ class ReportController extends Controller
     private function yieldReport(Request $request, User $user): array
     {
         $status = $request->query('status');
-        $asOf = $request->query('as_of')
-            ? \Illuminate\Support\Carbon::parse((string) $request->query('as_of'))
-            : today();
+        // Der abgesicherte Helfer, wie in den anderen Reports: ein
+        // unpruefbarer Stichtag aus der Adresszeile darf den Report nicht
+        // mit einem Serverfehler beenden.
+        $asOf = $this->date($request->query('as_of')) ?? today();
 
         $loans = Loan::visibleTo($user)->inCurrentView($user)
             ->with(['lender:id,display_name', 'borrower:id,display_name'])
@@ -236,12 +237,12 @@ class ReportController extends Controller
             format_date($item->due_date),
             format_money($item->planned_amount),
             $item->actual_amount !== null ? format_money($item->actual_amount) : '',
-            format_money($item->openAmount()),
+            format_money($item->expectedAmount()),
             $item->status->label(),
         ])->all();
 
         return [
-            'columns' => ['Darlehensnummer', 'Art', 'Fällig am', 'Sollbetrag', 'Istbetrag', 'Offen', 'Status'],
+            'columns' => ['Darlehensnummer', 'Art', 'Fällig am', 'Sollbetrag', 'Istbetrag', 'Noch zu zahlen', 'Status'],
             'rows' => $rows,
             'filters' => ['bis' => $until->toDateString(), 'typ' => $type],
             'hint' => 'Berücksichtigt Positionen mit Status Geplant, Nicht bezahlt und Teilweise bezahlt bis zum gewählten Datum.',
@@ -355,7 +356,7 @@ class ReportController extends Controller
             }
             $open = '0.00';
             foreach ($items as $item) {
-                $open = Money::add($open, $item->openAmount());
+                $open = Money::add($open, $item->expectedAmount());
             }
             $rows[] = [
                 $loan->loan_number,

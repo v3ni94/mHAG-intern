@@ -176,9 +176,26 @@ class FlysystemDocumentStorage implements DocumentStorageInterface
         }
     }
 
+    /**
+     * Inhalt eines Dokuments lesen.
+     *
+     * Der Rueckfall auf null war unerreichbar: Storage::get() wirft bei einer
+     * fehlenden oder nicht lesbaren Datei eine Flysystem-Ausnahme, statt null
+     * zu liefern. Die vorgesehene deutsche Meldung konnte deshalb nie greifen,
+     * und die Aufrufer sahen eine englische Ausnahme als Serverfehler 500.
+     */
     public function retrieve(Document $document): string
     {
-        $contents = Storage::disk($document->storage_disk)->get($document->storage_path);
+        try {
+            $contents = Storage::disk($document->storage_disk)->get($document->storage_path);
+        } catch (\Throwable $e) {
+            throw new \RuntimeException(
+                'Die Datei wurde in der Dokumentenablage nicht gefunden oder ist nicht lesbar.',
+                0,
+                $e,
+            );
+        }
+
         if ($contents === null) {
             throw new \RuntimeException('Die Datei wurde in der Dokumentenablage nicht gefunden.');
         }

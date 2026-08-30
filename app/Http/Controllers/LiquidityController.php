@@ -77,7 +77,9 @@ class LiquidityController extends Controller
                 RepaymentItemType::Principal => 'principal',
                 RepaymentItemType::Fee => 'fee',
             };
-            $months[$key][$bucket] = Money::add($months[$key][$bucket], $item->openAmount());
+            // Erwarteter Zahlungsbetrag, nicht der Buchwert: fuer die Planung
+            // ist eine nur angenommene Erfuellung kein Geldeingang.
+            $months[$key][$bucket] = Money::add($months[$key][$bucket], $item->expectedAmount());
         }
 
         foreach ($disbursements as $disbursement) {
@@ -118,6 +120,25 @@ class LiquidityController extends Controller
         ]);
     }
 
+    /**
+     * Datum aus einem Filterparameter, oder null.
+     *
+     * Ein unpruefbarer Wert aus der Adresszeile darf die Seite nicht mit einem
+     * Serverfehler beenden; dann gilt der Vorgabezeitraum.
+     */
+    private static function datum(?string $wert): ?Carbon
+    {
+        if ($wert === null || trim($wert) === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($wert)->startOfDay();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     /** @return array{0: Carbon, 1: Carbon} */
     private function resolvePeriod(string $preset, ?string $from, ?string $to): array
     {
@@ -128,8 +149,8 @@ class LiquidityController extends Controller
             'quarter' => [$today->copy()->startOfQuarter(), $today->copy()->endOfQuarter()],
             'year' => [$today->copy()->startOfYear(), $today->copy()->endOfYear()],
             'custom' => [
-                $from ? Carbon::parse($from) : $today->copy()->startOfMonth(),
-                $to ? Carbon::parse($to) : $today->copy()->addMonths(12)->endOfMonth(),
+                self::datum($from) ?? $today->copy()->startOfMonth(),
+                self::datum($to) ?? $today->copy()->addMonths(12)->endOfMonth(),
             ],
             default => [$today->copy()->startOfMonth(), $today->copy()->addMonths(11)->endOfMonth()],
         };

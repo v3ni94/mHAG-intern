@@ -308,7 +308,12 @@ class ResolutionController extends Controller
         $document = $resolution->document()->first();
 
         if ($document) {
-            $content = $storage->retrieve($document);
+            try {
+                $content = $storage->retrieve($document);
+            } catch (\RuntimeException $e) {
+                return back()->with('danger', 'Das abgelegte Beschluss-PDF ist in der '
+                    .'Dokumentenablage nicht auffindbar. Bitte die Ablage prüfen.');
+            }
 
             return response($content, 200, [
                 'Content-Type' => $document->mime_type ?: 'application/pdf',

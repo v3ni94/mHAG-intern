@@ -68,7 +68,7 @@
                             <td><a href="{{ route('loans.show', ['loan' => $item->loan_id, 'tab' => 'zahlungsplan']) }}">{{ $item->loan?->loan_number }}</a></td>
                             <td>{{ $item->item_type?->label() }}</td>
                             <td class="text-end"><x-money :amount="$item->planned_amount" /></td>
-                            <td class="text-end fw-semibold"><x-money :amount="$item->openAmount()" /></td>
+                            <td class="text-end fw-semibold"><x-money :amount="$item->expectedAmount()" /></td>
                             <td><x-enum-badge :enum="$item->status" /></td>
                             <td><x-origin-badge :origin="$item->origin" /></td>
                         </tr>
@@ -105,7 +105,7 @@
                             <td><a href="{{ route('loans.show', ['loan' => $item->loan_id, 'tab' => 'zahlungsplan']) }}">{{ $item->loan?->loan_number }}</a></td>
                             <td>{{ $item->item_type?->label() }}</td>
                             <td class="text-end"><x-money :amount="$item->planned_amount" /></td>
-                            <td class="text-end"><x-money :amount="$item->openAmount()" /></td>
+                            <td class="text-end"><x-money :amount="$item->expectedAmount()" /></td>
                             <td><x-enum-badge :enum="$item->status" /></td>
                             <td><x-origin-badge :origin="$item->origin" /></td>
                         </tr>

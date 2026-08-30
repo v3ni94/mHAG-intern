@@ -68,6 +68,32 @@ class ShareholderListSnapshotTest extends HoldingTestCase
         $this->assertStringStartsWith('%PDF', $download->getContent());
     }
 
+    public function test_fehlende_datei_meldet_statt_die_seite_abzubrechen(): void
+    {
+        /*
+         * Befund vom 30.08.2026: retrieve() lief ungesichert. Fehlt die Datei
+         * in der Ablage, warf Flysystem eine englische Ausnahme, und der
+         * Download endete mit einem Serverfehler 500. Betroffen war ein
+         * registerrelevantes Dokument. Der vorgesehene deutsche Hinweis in
+         * FlysystemDocumentStorage war unerreichbar, weil Storage::get() nicht
+         * null liefert, sondern wirft.
+         */
+        $this->actingAs($this->admin());
+        $this->post(route('shareholders.list.create'));
+
+        $snapshot = ShareholderListSnapshot::firstOrFail();
+        $document = Document::findOrFail($snapshot->document_id);
+
+        // Datei aus der Ablage entfernen, Eintrag bleibt bestehen.
+        Storage::disk('documents')->delete($document->storage_path);
+
+        $antwort = $this->get(route('shareholders.list.download', $snapshot));
+
+        $antwort->assertRedirect();
+        $antwort->assertSessionHas('danger');
+        $this->assertStringContainsString('nicht auffindbar', (string) session('danger'));
+    }
+
     public function test_snapshot_erzeugen_erfordert_berechtigung_shares_list(): void
     {
         $this->actingAs($this->readOnlyUser());

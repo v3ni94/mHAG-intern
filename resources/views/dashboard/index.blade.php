@@ -124,11 +124,15 @@
                                     :severity="$adminOverview['failed_jobs'] > 0 ? 'danger' : null" />
                     </div>
                     <div class="col-6 col-md-3">
-                        @php($lastBackup = $adminOverview['last_backup'])
+                        {{-- Schluessel nicht voraussetzen: ein unvollstaendiger
+                             Statuseintrag haette das Dashboard lahmgelegt, also die
+                             Seite direkt nach der Anmeldung. --}}
+                        @php($lastBackup = $adminOverview['last_backup'] ?? null)
+                        @php($backupOk = is_array($lastBackup) ? (bool) ($lastBackup['success'] ?? false) : false)
                         <x-kpi-card label="Letztes Backup"
-                                    :value="$lastBackup ? ($lastBackup['success'] ? 'OK' : 'Fehler') : 'noch keins'"
-                                    :severity="$lastBackup ? ($lastBackup['success'] ? 'success' : 'danger') : 'warning'"
-                                    :hint="$lastBackup['finished_at'] ?? null" />
+                                    :value="$lastBackup ? ($backupOk ? 'OK' : 'Fehler') : 'noch keins'"
+                                    :severity="$lastBackup ? ($backupOk ? 'success' : 'danger') : 'warning'"
+                                    :hint="is_array($lastBackup) ? ($lastBackup['finished_at'] ?? null) : null" />
                     </div>
                 </div>
                 @if ($adminOverview['recalculation_errors']->isNotEmpty())

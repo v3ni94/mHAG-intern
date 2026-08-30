@@ -20,7 +20,10 @@
             @forelse (auth()->user()?->notifications()->latest()->limit(8)->get() ?? [] as $notification)
                 <a href="{{ $notification->data['url'] ?? route('notifications.index') }}" class="dropdown-item small py-2 {{ $notification->read_at ? 'text-muted' : 'fw-semibold' }}" style="white-space: normal;">
                     {{ $notification->data['message'] ?? 'Benachrichtigung' }}
-                    <div class="text-muted fw-normal" style="font-size: 0.7rem;">{{ $notification->created_at->diffForHumans() }}</div>
+                    {{-- created_at ist nullable. Das Partial liegt im Layout jeder
+                         angemeldeten Seite, ein fehlender Zeitstempel haette also
+                         die gesamte Anwendung lahmgelegt. --}}
+                    <div class="text-muted fw-normal" style="font-size: 0.7rem;">{{ $notification->created_at?->diffForHumans() ?? '' }}</div>
                 </a>
             @empty
                 <div class="p-3 text-center text-muted small">Keine Benachrichtigungen.</div>

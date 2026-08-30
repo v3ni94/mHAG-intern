@@ -109,7 +109,16 @@ class NotificationService
                 continue;
             }
             $broadcast(
-                sprintf('Zahlung überfällig seit %s: %s, %s (offen %s).', format_date($item->due_date), $item->loan->loan_number, $item->item_type->label(), format_money($item->openAmount())),
+                sprintf(
+                    'Zahlung überfällig seit %s: %s, %s (noch zu zahlen %s).',
+                    format_date($item->due_date),
+                    $item->loan->loan_number,
+                    $item->item_type->label(),
+                    // Erwarteter Betrag, nicht der Buchwert: bei einer nur
+                    // angenommenen Erfuellung waere der Buchwert 0,00 und die
+                    // Meldung damit sinnlos.
+                    format_money($item->expectedAmount()),
+                ),
                 $this->url('loans.show', $item->loan_id),
                 'danger',
                 'repayment_overdue:'.$item->id,

@@ -175,8 +175,16 @@ class ContractController extends Controller
         $contract = $this->scopedQuery($request->user())->with(['loan', 'document'])->findOrFail($contract->id);
 
         if ($contract->document) {
+            // Fehlende Datei ist ein Betriebszustand, kein Programmfehler: sie
+            // wird benannt, nicht als Serverfehler ausgeliefert.
+            try {
+                $contents = $storage->retrieve($contract->document);
+            } catch (\RuntimeException $e) {
+                return back()->with('danger', 'Das Vertragsdokument ist in der Dokumentenablage '
+                    .'nicht auffindbar. Bitte die Ablage prüfen oder das Dokument erneut hochladen.');
+            }
+
             AuditService::log('documents.downloaded', $contract->document, [], ['context' => 'contracts.pdf']);
-            $contents = $storage->retrieve($contract->document);
 
             return response()->streamDownload(
                 fn () => print $contents,

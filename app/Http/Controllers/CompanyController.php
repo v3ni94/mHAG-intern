@@ -146,6 +146,11 @@ class CompanyController extends Controller
         $this->ensureAccessible($request, $entity);
         $entity->load('company');
 
+        // Ohne Unternehmenssatz ist die Akte unvollstaendig. Frueher brach der
+        // Speichervorgang hier mit einem Serverfehler ab.
+        abort_if($entity->company === null, 404,
+            'Zu diesem Eintrag ist kein Unternehmenssatz hinterlegt. Bitte die Administration verständigen.');
+
         $oldCompany = $entity->company->only(array_keys($request->companyData()));
         $oldEntity = $entity->only(['tags', 'notes']);
 

@@ -34,11 +34,22 @@ class LoanBalanceService
      * Reine Annahme-Zustaende (Abschnitt 24): planned zaehlt fuer Stichtage
      * mit due_date <= asOf ebenfalls als planmaessig erfuellt, unabhaengig
      * davon, ob rollForwardAssumed bereits gelaufen ist.
+     *
+     * Die Zuordnung steht in RepaymentItemStatus und wird hier nur gelesen.
+     * Zuvor lag sie doppelt vor, hier und im Modell RepaymentPlanItem, und
+     * beide Stellen waren nicht deckungsgleich: dieselbe Position wies im
+     * Darlehensreiter den vollen Betrag als offen aus, waehrend Kennzahl und
+     * Forderungsaufstellung 0,00 meldeten.
+     *
+     * @return array<int, RepaymentItemStatus>
      */
-    private const ASSUMED_STATUSES = [
-        RepaymentItemStatus::Planned,
-        RepaymentItemStatus::Assumed,
-    ];
+    private static function assumedStatuses(): array
+    {
+        return array_values(array_filter(
+            RepaymentItemStatus::cases(),
+            fn (RepaymentItemStatus $status) => $status->giltAlsErfuelltDurchAnnahme(),
+        ));
+    }
 
     /**
      * Alle Werte als Dezimalstrings (2 NK); asOf = null bedeutet heute.
@@ -92,7 +103,7 @@ class LoanBalanceService
                     // der Betrag steckt ueber die Buchung im Kapital.
                     $interestCapitalized = Money::add($interestCapitalized, $planned);
                 } else {
-                    if (in_array($item->status, self::ASSUMED_STATUSES, true)) {
+                    if (in_array($item->status, self::assumedStatuses(), true)) {
                         $interestAssumed = Money::add($interestAssumed, $paidEffective);
                     } elseif (in_array($item->status, self::CONFIRMED_STATUSES, true)) {
                         $interestConfirmed = Money::add($interestConfirmed, $paidEffective);
@@ -106,7 +117,7 @@ class LoanBalanceService
                 $feesPaid = Money::add($feesPaid, $paidEffective);
                 // Bestaetigte und systemseitig angenommene Gebuehrenzahlungen
                 // getrennt fuehren (Abschnitt 24), wie bei den Zinsen.
-                if (in_array($item->status, self::ASSUMED_STATUSES, true)) {
+                if (in_array($item->status, self::assumedStatuses(), true)) {
                     $feesAssumed = Money::add($feesAssumed, $paidEffective);
                 } elseif (in_array($item->status, self::CONFIRMED_STATUSES, true)) {
                     $feesConfirmed = Money::add($feesConfirmed, $paidEffective);
@@ -329,7 +340,7 @@ class LoanBalanceService
      */
     protected function effectiveActualAsOf(RepaymentPlanItem $item, string $asOfStr): string
     {
-        if (in_array($item->status, self::ASSUMED_STATUSES, true)) {
+        if (in_array($item->status, self::assumedStatuses(), true)) {
             return Money::normalize($item->planned_amount);
         }
         if (in_array($item->status, self::CONFIRMED_STATUSES, true)) {

@@ -148,6 +148,11 @@ class PersonController extends Controller
         $this->ensureAccessible($request, $entity);
         $entity->load('person');
 
+        // Ohne Personensatz ist die Akte unvollstaendig. Frueher brach der
+        // Speichervorgang hier mit einem Serverfehler ab.
+        abort_if($entity->person === null, 404,
+            'Zu diesem Eintrag ist kein Personensatz hinterlegt. Bitte die Administration verständigen.');
+
         $oldPerson = $entity->person->only(array_keys($request->personData()));
         $oldEntity = $entity->only(['tags', 'notes']);
 

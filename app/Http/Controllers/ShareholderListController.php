@@ -44,7 +44,13 @@ class ShareholderListController extends Controller
         $document = $snapshot->document()->first();
         abort_if(! $document, 404, 'Zu dieser Aktionärsliste ist kein Dokument hinterlegt.');
 
-        $content = $this->storage->retrieve($document);
+        try {
+            $content = $this->storage->retrieve($document);
+        } catch (\RuntimeException $e) {
+            return back()->with('danger', 'Die abgelegte Aktionärsliste ist in der '
+                .'Dokumentenablage nicht auffindbar. Bitte die Ablage prüfen. Der Eintrag zur '
+                .'Liste bleibt bestehen.');
+        }
 
         AuditService::log('shareholders.list-downloaded', $snapshot, [], [], [
             'document_number' => $snapshot->document_number,

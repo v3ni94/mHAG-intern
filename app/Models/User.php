@@ -237,16 +237,28 @@ class User extends Authenticatable
     }
 
     /**
-     * Sichtbarkeitsmodus. Standard ist der Einschluss, also das bisherige
-     * Verhalten: sichtbar sind nur die zugeordneten Gesellschaften.
+     * Datenscope-Modus des Benutzers.
+     *
+     * Bewusst über den Rohwert des Feldes. Der Enum-Cast wirft einen
+     * ValueError, wenn in der Datenbank ein Wert steht, den die Aufzählung
+     * nicht kennt, etwa nach einem Rückbau der Anwendung oder einem Import.
+     * Der angemeldete Benutzer wird in jeder Anfrage geladen; ein solcher Wert
+     * hätte deshalb jede Seite mit einem Serverfehler 500 beendet, genau wie
+     * das nicht lesbare Zwei-Faktor-Geheimnis am 30.08.2026.
+     *
+     * Unbekannter Wert bedeutet Einschluss, also die engere Auslegung: der
+     * Benutzer sieht dann nur ausdrücklich zugeordnete Entitäten und nicht
+     * versehentlich den Gesamtbestand.
      */
     public function entityScopeMode(): \App\Enums\EntityScopeMode
     {
-        if ($this->entity_scope_mode instanceof \App\Enums\EntityScopeMode) {
-            return $this->entity_scope_mode;
+        $roh = $this->getAttributes()['entity_scope_mode'] ?? null;
+
+        if ($roh instanceof \App\Enums\EntityScopeMode) {
+            return $roh;
         }
 
-        return \App\Enums\EntityScopeMode::tryFrom((string) $this->entity_scope_mode)
+        return \App\Enums\EntityScopeMode::tryFrom((string) $roh)
             ?? \App\Enums\EntityScopeMode::Include;
     }
 

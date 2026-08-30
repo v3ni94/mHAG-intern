@@ -46,7 +46,8 @@ class LoanBalanceService
      * Keys: disbursed, repaid, capitalized, principal_outstanding,
      * interest_charged, interest_confirmed, interest_assumed, interest_open,
      * interest_capitalized, fees_charged,
-     * fees_paid, fees_open, default_interest, account_balance,
+     * fees_paid, fees_confirmed, fees_assumed, fees_open,
+     * default_interest, account_balance,
      * payments_received, total_receivable, overdue_amount, next_due_date,
      * next_due_amount.
      */
@@ -63,6 +64,8 @@ class LoanBalanceService
         $interestCapitalized = '0.00';
         $feesCharged = '0.00';
         $feesPaid = '0.00';
+        $feesConfirmed = '0.00';
+        $feesAssumed = '0.00';
         $feesOpen = '0.00';
         $overdue = '0.00';
 
@@ -101,6 +104,13 @@ class LoanBalanceService
             } elseif ($item->item_type === RepaymentItemType::Fee) {
                 $feesCharged = Money::add($feesCharged, $planned);
                 $feesPaid = Money::add($feesPaid, $paidEffective);
+                // Bestaetigte und systemseitig angenommene Gebuehrenzahlungen
+                // getrennt fuehren (Abschnitt 24), wie bei den Zinsen.
+                if (in_array($item->status, self::ASSUMED_STATUSES, true)) {
+                    $feesAssumed = Money::add($feesAssumed, $paidEffective);
+                } elseif (in_array($item->status, self::CONFIRMED_STATUSES, true)) {
+                    $feesConfirmed = Money::add($feesConfirmed, $paidEffective);
+                }
                 if ($item->status !== RepaymentItemStatus::Waived) {
                     $feesOpen = Money::add($feesOpen, $open);
                 }
@@ -137,6 +147,8 @@ class LoanBalanceService
             'interest_capitalized' => $interestCapitalized,
             'fees_charged' => $feesCharged,
             'fees_paid' => $feesPaid,
+            'fees_confirmed' => $feesConfirmed,
+            'fees_assumed' => $feesAssumed,
             'fees_open' => $feesOpen,
             'default_interest' => $capital['default_interest'],
             'account_balance' => $accountBalance,

@@ -108,6 +108,7 @@
             'soll-ist' => 'Soll/Ist',
             'zahlungen' => 'Zahlungen',
             'zinsen' => 'Zinsen',
+            'ertrag' => 'Ertrag',
             'gebuehren' => 'Gebühren',
             'auszahlungen' => 'Auszahlungen',
             'vertraege' => 'Verträge',

@@ -33,6 +33,7 @@ class ReportController extends Controller
         'zinsen-soll-ist' => ['Zinsen Soll/Ist', 'Sollzinsen, bestätigte und systemseitig angenommene Zahlungen je Darlehen und Jahr.', 'bi-percent', 'loans.view'],
         'faelligkeiten' => ['Fälligkeiten', 'Kommende Zins-, Tilgungs- und Gebührenfälligkeiten.', 'bi-calendar-check', 'loans.view'],
         'ueberfaellige-darlehen' => ['Überfällige Darlehen', 'Darlehen mit erfassten Zahlungsausfällen oder Teilzahlungen.', 'bi-exclamation-octagon', 'loans.view'],
+        'ertrag-rendite' => ['Ertrag und Rendite', 'Belegter Ertrag, durchschnittlich gebundenes Kapital, Rendite und Effektivrendite je Darlehen.', 'bi-graph-up-arrow', 'loans.view'],
         'sicherheiten' => ['Sicherheiten und Bürgschaften', 'Bestellte Sicherheiten und Bürgschaften mit Laufzeiten.', 'bi-shield-check', 'loans.view'],
         'darlehen-je-kreditgeber' => ['Darlehen je Kreditgeber', 'Anzahl und Volumen gruppiert nach Darlehensgeber.', 'bi-people', 'loans.view'],
         'darlehen-je-kreditnehmer' => ['Darlehen je Kreditnehmer', 'Anzahl und Volumen gruppiert nach Darlehensnehmer.', 'bi-person-lines-fill', 'loans.view'],
@@ -45,6 +46,7 @@ class ReportController extends Controller
 
     public function __construct(
         private readonly \App\Services\Loans\LoanBalanceService $balanceService,
+        private readonly \App\Services\Loans\LoanYieldService $yieldService,
     ) {
     }
 
@@ -96,6 +98,7 @@ class ReportController extends Controller
             'zinsen-soll-ist' => $this->interestTargetActual($request, $user),
             'faelligkeiten' => $this->dueDates($request, $user),
             'ueberfaellige-darlehen' => $this->overdueLoans($request, $user),
+            'ertrag-rendite' => $this->yieldReport($request, $user),
             'sicherheiten' => $this->securities($request, $user),
             'darlehen-je-kreditgeber' => $this->loansByParty($request, $user, 'lender'),
             'darlehen-je-kreditnehmer' => $this->loansByParty($request, $user, 'borrower'),
@@ -110,6 +113,65 @@ class ReportController extends Controller
     // ------------------------------------------------------------------
     // Darlehen
     // ------------------------------------------------------------------
+
+    /**
+     * Ertrag und Rendite je Darlehen (Anforderung vom 30.08.2026).
+     *
+     * Belegter Ertrag und Ertrag einschliesslich systemseitiger Annahmen
+     * werden getrennt ausgewiesen (Abschnitt 24). Nicht ermittelbare
+     * Effektivrenditen werden als "nicht berechenbar" gekennzeichnet, es wird
+     * keine Zahl erfunden.
+     */
+    private function yieldReport(Request $request, User $user): array
+    {
+        $status = $request->query('status');
+        $asOf = $request->query('as_of')
+            ? \Illuminate\Support\Carbon::parse((string) $request->query('as_of'))
+            : today();
+
+        $loans = Loan::visibleTo($user)
+            ->with(['lender:id,display_name', 'borrower:id,display_name'])
+            ->when($status, fn ($q) => $q->where('status', $status))
+            ->orderBy('loan_number')
+            ->get();
+
+        $prozent = fn (?string $wert) => $wert === null
+            ? 'nicht berechenbar'
+            : number_format((float) $wert, 4, ',', '.').' %';
+
+        $rows = $loans->map(function (Loan $loan) use ($asOf, $prozent) {
+            $yield = $this->yieldService->analyse($loan, $asOf);
+
+            return [
+                $loan->loan_number,
+                (string) $loan->title,
+                $loan->borrower?->display_name ?? '',
+                $loan->status?->label() ?? '',
+                format_money($yield['interest_confirmed']),
+                format_money($yield['interest_capitalized']),
+                format_money($yield['fees_confirmed']),
+                format_money($yield['yield_confirmed']),
+                format_money($yield['yield_assumed']),
+                format_money($yield['average_capital']),
+                $prozent($yield['return_pa']),
+                $prozent($yield['irr']),
+            ];
+        })->all();
+
+        return [
+            'columns' => [
+                'Darlehensnummer', 'Titel', 'Darlehensnehmer', 'Status',
+                'Vereinnahmte Zinsen', 'Kapitalisierte Zinsen', 'Vereinnahmte Gebühren',
+                'Ertrag belegt', 'davon nur angenommen', 'Durchschnittlich gebundenes Kapital',
+                'Rendite p. a.', 'Effektivrendite p. a.',
+            ],
+            'rows' => $rows,
+            'filters' => ['status' => $status, 'as_of' => $asOf->toDateString()],
+            'hint' => 'Belegter Ertrag umfasst bestätigte Zahlungen und dem Kapital zugeschriebene Zinsen. '
+                .'Systemseitig angenommene Zahlungen sind gesondert ausgewiesen und nicht im belegten Ertrag enthalten. '
+                .'Die Effektivrendite ist eine rechnerische Kennzahl aus den erfassten Zahlungsströmen, keine Bewertung.',
+        ];
+    }
 
     private function loanPortfolio(Request $request, User $user): array
     {

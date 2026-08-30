@@ -58,8 +58,8 @@ class LoanController extends Controller
     /** Reiter der Detailseite (Abschnitt 135); Reihenfolge wie in der View. */
     public const TABS = [
         'uebersicht', 'konto', 'zahlungsplan', 'soll-ist', 'zahlungen', 'zinsen',
-        'gebuehren', 'auszahlungen', 'vertraege', 'sicherheiten', 'dokumente',
-        'chronik', 'neuberechnungen',
+        'ertrag', 'gebuehren', 'auszahlungen', 'vertraege', 'sicherheiten',
+        'dokumente', 'chronik', 'neuberechnungen',
     ];
 
     public const FINANCIAL_STATUSES = [
@@ -348,6 +348,9 @@ class LoanController extends Controller
                 'defaultInterestBasisLabel' => $defaultInterestService->basisLabel($model),
                 'defaultInterestModeLabel' => $defaultInterestService->modeLabel($model),
             ],
+            // Ertrag und Rendite (Anforderung 30.08.2026): jede Kennzahl mit
+            // ihren Bestandteilen, damit der Rechenweg angezeigt werden kann.
+            'ertrag' => ['yield' => app(\App\Services\Loans\LoanYieldService::class)->analyse($model)],
             'dokumente' => ['statementDocuments' => $this->statementDocuments($model)],
             'auszahlungen' => [
                 // Bankkonten beider Seiten (Abschnitt 31): Geber- und Nehmerkonten

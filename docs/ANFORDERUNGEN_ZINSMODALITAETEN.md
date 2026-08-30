@@ -163,6 +163,39 @@ Auszuweisen:
 Wichtig: Die Effektivrendite ist eine rechnerische Kennzahl, keine
 Bonitäts- oder Wertaussage. Kein Vergleich mit Marktzinsen, keine Prognose.
 
+**Umgesetzt am 30.08.2026.** `LoanYieldService::analyse()` liefert alle
+Kennzahlen mit ihren Bestandteilen; der Reiter "Ertrag" am Darlehen zeigt den
+Rechenweg, der Report "Ertrag und Rendite" alle sichtbaren Darlehen.
+
+Präzisierungen gegenüber dem Entwurf:
+
+- Der Ertrag wird zweimal ausgewiesen: **belegt** (bestätigte Zahlungen und
+  gebuchte Zinszuschreibungen) und **einschließlich Annahmen**. Beide Werte
+  stehen nebeneinander, vermischt werden sie nie.
+- Betrachtungszeitraum für das durchschnittlich gebundene Kapital beginnt am
+  ersten Tag mit positivem Kapital, also mit der ersten Auszahlung. Die Zeit
+  davor ist kein gebundenes Kapital und würde den Mittelwert ohne
+  Aussagewert verwässern. Ohne Auszahlung wird keine Rendite ausgewiesen.
+- Der Jahresbruchteil kommt aus der Zinsmethode des Darlehens
+  (`dayCountFactor`), damit Rendite und Zinsrechnung dieselbe Konvention
+  verwenden.
+- Zahlungsströme der Effektivrendite kommen aus dem Darlehenskonto: eine
+  Buchung gilt als zahlungswirksam, wenn sie aus einer Zahlung stammt
+  (Geldeingang, auch Stornos davon) oder eine Auszahlung ist. Sollstellungen,
+  Zinszuschreibungen und Abschreibungen bleiben außen vor; sie wirken über die
+  Restforderung zum Stichtag.
+- Die Intervallhalbierung rechnet auf dem **Tageszinssatz**. Nur so bleibt die
+  Rechnung vollständig in BCMath, weil `bcpow` ausschließlich ganzzahlige
+  Exponenten kennt: Barwert = Summe Zahlung / (1 + Tagessatz)^Tage, Jahreswert
+  = (1 + Tagessatz)^365 - 1. Ohne Vorzeichenwechsel im Suchbereich, ohne
+  Auszahlung oder ohne Rückfluss wird "nicht berechenbar" mit Begründung
+  ausgewiesen.
+
+Belegt durch `tests/Feature/Loans/EngineYieldTest.php` (8 Tests) und
+`tests/Feature/Loans/UiYieldTest.php` (4 Tests). Prüffall der
+Effektivrendite: 100.000,00 EUR ausgezahlt am 01.01.2026, 106.000,00 EUR
+zurück am 01.01.2027, ergibt genau 6,0000 % p. a.
+
 ## 5. Ausfall
 
 Der Status "Ausgefallen" existiert. Zu ergänzen:

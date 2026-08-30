@@ -151,8 +151,12 @@ class LoanBalanceService
         $rows = [];
         $rows[] = ['label' => 'Ausgezahltes Kapital', 'amount' => $b['disbursed'], 'sign' => '+'];
         $rows[] = ['label' => 'Vertragszinsen bis '.Carbon::parse($asOfStr)->format('d.m.Y'), 'amount' => $b['interest_charged'], 'sign' => '+'];
-        if (! Money::isZero($b['default_interest']) || $loan->default_interest_enabled) {
-            $rows[] = ['label' => 'Verzugszinsen', 'amount' => Money::max($b['default_interest'], '0.00'), 'sign' => '+'];
+        // Verzugszinsen nur ausweisen, wenn tatsaechlich berechnet und gebucht
+        // (Abschnitt 143: keine Schein-Positionen). Eine aktivierte, aber
+        // fachlich nicht vorgegebene Verzugszinsregelung erzeugt KEINE Zeile
+        // mit 0,00 EUR; der Hinweis dazu steht im PDF.
+        if (Money::isPositive($b['default_interest'])) {
+            $rows[] = ['label' => 'Verzugszinsen', 'amount' => $b['default_interest'], 'sign' => '+'];
         }
         if (! Money::isZero($b['fees_charged'])) {
             $rows[] = ['label' => 'Gebühren', 'amount' => $b['fees_charged'], 'sign' => '+'];

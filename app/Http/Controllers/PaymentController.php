@@ -96,6 +96,7 @@ class PaymentController extends Controller
     public function store(
         StorePaymentRequest $request,
         PaymentAllocationService $allocationService,
+        LoanRecalculationService $recalculationService,
     ): RedirectResponse {
         $user = $this->currentUser($request);
         $data = $request->validated();
@@ -135,6 +136,20 @@ class PaymentController extends Controller
             'origin' => $payment->origin?->value,
             'allocation' => $allocation,
         ]);
+
+        // Neuberechnung ab dem Wirkungsdatum der Zahlung (Abschnitt 35):
+        // eine Kapitalverrechnung verändert den Kapitalverlauf, die künftigen
+        // Zins-SOLL-Zeilen müssen dem neuen Kapital folgen.
+        $earliest = ($payment->value_date && $payment->value_date->lt($payment->payment_date))
+            ? $payment->value_date
+            : $payment->payment_date;
+
+        $recalculationService->recalculate(
+            $loan,
+            'payments.recorded',
+            $earliest ? Carbon::parse($earliest) : null,
+            $user,
+        );
 
         return redirect()
             ->route('payments.show', $payment)

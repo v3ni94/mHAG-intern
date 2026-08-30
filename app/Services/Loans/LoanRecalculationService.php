@@ -27,6 +27,7 @@ class LoanRecalculationService
     public function __construct(
         protected LoanScheduleService $schedule,
         protected LoanBalanceService $balance,
+        protected DefaultInterestService $defaultInterest,
     ) {}
 
     public function recalculate(Loan $loan, string $trigger, ?CarbonInterface $earliestAffectedDate = null, ?User $user = null): LoanRecalculation
@@ -41,6 +42,7 @@ class LoanRecalculationService
                 $this->rollForwardAssumedDisbursements($loan, $user);
                 $this->schedule->generate($loan);
                 $this->schedule->rollForwardAssumed($loan);
+                $this->updateDefaultInterest($loan, $user);
             });
 
             $newState = $this->balance->balances($loan);
@@ -109,6 +111,25 @@ class LoanRecalculationService
                 'created_at' => now(),
             ]);
         }
+    }
+
+    /**
+     * Verzugszinsen fortschreiben (Abschnitte 36/44), ausschliesslich bei
+     * Aktivierungsart "automatisch" UND vollstaendiger fachlicher Vorgabe
+     * (Satz und Verzugsbeginn). Bei "manuell" bleibt die Buchung dem
+     * ausdruecklichen Anstoss durch den Bearbeiter vorbehalten; ohne
+     * Vorgaben wird nichts berechnet und nichts gebucht.
+     */
+    protected function updateDefaultInterest(Loan $loan, ?User $user): void
+    {
+        if ($loan->default_interest_mode !== DefaultInterestService::MODE_AUTOMATIC) {
+            return;
+        }
+        if (! $this->defaultInterest->isConfigured($loan)) {
+            return;
+        }
+
+        $this->defaultInterest->book($loan, today(), $user);
     }
 
     protected function elapsedMs(int|float $startedAt): int

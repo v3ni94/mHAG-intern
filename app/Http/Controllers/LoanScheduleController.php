@@ -9,15 +9,18 @@ use App\Models\RepaymentPlanItem;
 use App\Models\User;
 use App\Services\AuditService;
 use App\Services\Loans\LoanRecalculationService;
+use App\Services\Loans\ScheduleActualService;
 use App\Support\Money;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Carbon;
 
 /**
  * Soll/Ist-Erfassung je Zahlungsplan-Position (Abschnitte 26-28 Masterprompt).
- * Setzt IST-Betrag, Status und Herkunft (manuell bestätigt) und stößt die
- * Neuberechnung ab dem Fälligkeitsdatum an. manually_adjusted wird NUR bei
- * einer SOLL-Änderung gesetzt.
+ * Setzt IST-Betrag, Status und Herkunft (manuell bestätigt), bucht die
+ * Wirkung im Darlehenskonto (Abschnitte 29/48: Tilgung senkt das Kapital,
+ * Zins- und Gebührenzahlungen mindern die Forderung) und stößt anschließend
+ * die Neuberechnung ab dem Fälligkeitsdatum an.
+ * manually_adjusted wird NUR bei einer SOLL-Änderung gesetzt.
  */
 class LoanScheduleController extends Controller
 {
@@ -25,6 +28,7 @@ class LoanScheduleController extends Controller
         UpdateScheduleItemRequest $request,
         int $item,
         LoanRecalculationService $recalculationService,
+        ScheduleActualService $scheduleActualService,
     ): RedirectResponse {
         /** @var User $user */
         $user = $request->user();
@@ -68,6 +72,17 @@ class LoanScheduleController extends Controller
 
         $planItem->update($attributes);
 
+        // Wirkung im Darlehenskonto herstellen (Abschnitt 29): erfüllte
+        // Tilgung senkt das Kapital, Zins-/Gebührenzahlung mindert die
+        // Forderung. Rücknahme oder Korrektur wirkt per Gegenbuchung;
+        // bereits über eine Zahlung verrechnete Beträge werden nicht
+        // doppelt gebucht.
+        $booking = $scheduleActualService->reconcile(
+            $planItem,
+            $user,
+            'Korrektur der Zahlungsplan-Position vom '.format_date($planItem->due_date),
+        );
+
         AuditService::log('loans.schedule_item_updated', $planItem, $old, [
             'planned_amount' => (string) $planItem->planned_amount,
             'actual_amount' => (string) $planItem->actual_amount,
@@ -77,13 +92,21 @@ class LoanScheduleController extends Controller
             'loan_id' => $loan->id,
             'loan_number' => $loan->loan_number,
             'due_date' => $planItem->due_date?->toDateString(),
+            'booking_id' => $booking?->id,
+            'booking_amount' => $booking ? (string) $booking->amount : null,
         ]);
 
-        // Neuberechnung ab Fälligkeit der geänderten Position (Abschnitt 35)
+        // Neuberechnung ab dem frühesten betroffenen Datum (Abschnitt 35):
+        // Wirkungsdatum der Zahlung oder Fälligkeit, je nachdem was früher liegt.
+        $earliest = collect([
+            $planItem->due_date?->toDateString(),
+            $planItem->actual_date?->toDateString(),
+        ])->filter()->min();
+
         $recalculationService->recalculate(
             $loan,
             'schedule.actual_recorded',
-            $planItem->due_date ? Carbon::parse($planItem->due_date) : null,
+            $earliest ? Carbon::parse($earliest) : null,
             $user,
         );
 

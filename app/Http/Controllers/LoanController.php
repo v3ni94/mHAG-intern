@@ -12,6 +12,7 @@ use App\Models\Loan;
 use App\Models\LoanType;
 use App\Models\User;
 use App\Services\AuditService;
+use App\Services\Loans\DefaultInterestService;
 use App\Services\Loans\DisbursementService;
 use App\Services\Loans\LoanBalanceService;
 use App\Services\Loans\LoanRecalculationService;
@@ -47,6 +48,22 @@ class LoanController extends Controller
         'defaulted' => ['legal', 'written_off', 'archived'],
         'written_off' => ['archived'],
         'archived' => ['draft', 'active'],
+    ];
+
+    /**
+     * Statuswechsel mit finanzieller Wirkung (Abschnitt 35): danach ist die
+     * Neuberechnung anzustoßen, insbesondere bei Stundung (deferred).
+     */
+    /** Reiter der Detailseite (Abschnitt 135); Reihenfolge wie in der View. */
+    public const TABS = [
+        'uebersicht', 'konto', 'zahlungsplan', 'soll-ist', 'zahlungen', 'zinsen',
+        'gebuehren', 'auszahlungen', 'vertraege', 'sicherheiten', 'dokumente',
+        'chronik', 'neuberechnungen',
+    ];
+
+    public const FINANCIAL_STATUSES = [
+        'active', 'partially_repaid', 'repaid', 'deferred', 'terminated',
+        'overdue', 'dunning', 'legal', 'defaulted', 'written_off',
     ];
 
     /** Gescopter Zugriff: findOrFail immer über visibleTo (Abschnitt 14). */
@@ -149,6 +166,10 @@ class LoanController extends Controller
                 'repayment_model' => $data['repayment_model'],
                 'default_interest_enabled' => (bool) ($data['default_interest_enabled'] ?? false),
                 'default_interest_rate' => $data['default_interest_rate'] ?? null,
+                'default_interest_start' => $data['default_interest_start'] ?? null,
+                'default_interest_basis' => ($data['default_interest_basis'] ?? null) ?: DefaultInterestService::BASIS_OVERDUE_TOTAL,
+                'default_interest_method' => $data['default_interest_method'] ?? null,
+                'default_interest_mode' => ($data['default_interest_mode'] ?? null) ?: DefaultInterestService::MODE_MANUAL,
                 'risk_rating' => $user->isInternal() ? ($data['risk_rating'] ?? null) : null,
                 'handler_user_id' => $data['handler_user_id'] ?? null,
                 'project' => $data['project'] ?? null,
@@ -166,13 +187,14 @@ class LoanController extends Controller
             return $loan;
         });
 
-        // Optional: Auszahlung direkt planen (Abschnitt 31)
-        if ($request->boolean('plan_disbursement')) {
-            $disbursementService->plan($loan, [
-                'planned_amount' => $data['disbursement_planned_amount'],
-                'planned_date' => $data['disbursement_planned_date'],
-                'reference' => $data['disbursement_reference'] ?? null,
-            ], $user);
+        // Auszahlungen (Abschnitt 31): beliebig viele Teilauszahlungen mit
+        // Datum, Betrag und Status. Bestätigte Zeilen werden geplant UND
+        // bestätigt, damit die Kapitalbuchung mit Wirkungsdatum = Auszahlungs-
+        // datum entsteht und die Zinsen dem Kapitalverlauf taggenau folgen.
+        // planMany führt genau EINE Neuberechnung am Ende aus.
+        $rows = $this->disbursementRows($data);
+        if ($rows !== []) {
+            $disbursementService->planMany($loan, $rows, $user);
         }
 
         // Zahlungsplan (SOLL) erzeugen; bei rückwirkender Erfassung (Abschnitt 33)
@@ -189,17 +211,65 @@ class LoanController extends Controller
             'title' => $loan->title,
             'principal_amount' => (string) $loan->principal_amount,
             'effective_from' => $loan->effective_from?->toDateString(),
+            'disbursements' => count($rows),
         ]);
 
-        return redirect()
+        // Hinweis statt harter Ablehnung: Auszahlung vor Wirkungsbeginn
+        $beforeStart = collect($rows)->filter(
+            fn (array $row) => $row['planned_date'] < $loan->effective_from->toDateString(),
+        )->count();
+
+        $redirect = redirect()
             ->route('loans.show', $loan)
-            ->with('success', 'Darlehen '.$loan->loan_number.' wurde angelegt.');
+            ->with('success', 'Darlehen '.$loan->loan_number.' wurde angelegt.'
+                .($rows !== [] ? ' '.count($rows).' Auszahlung(en) wurden erfasst.' : ''));
+
+        if ($beforeStart > 0) {
+            $redirect->with('info', 'Hinweis: '.$beforeStart.' Auszahlung(en) liegen vor dem Wirkungsbeginn '
+                .format_date($loan->effective_from).'. Bitte prüfen, ob Wirkungsbeginn oder Auszahlungsdatum zu korrigieren ist.');
+        }
+
+        return $redirect;
     }
 
-    public function show(Request $request, int $loan, LoanBalanceService $balanceService): View
+    /**
+     * Auszahlungszeilen des Anlegen-Formulars in die Struktur des
+     * DisbursementService überführen (Abschnitt 31).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function disbursementRows(array $data): array
     {
+        $rows = [];
+        foreach ((array) ($data['disbursements'] ?? []) as $row) {
+            if (empty($row['date']) || empty($row['amount'])) {
+                continue;
+            }
+            $rows[] = [
+                'planned_amount' => Money::normalize($row['amount']),
+                'planned_date' => Carbon::parse($row['date'])->toDateString(),
+                'confirmed' => ($row['status'] ?? 'planned') === 'confirmed',
+                'origin' => $row['origin'] ?? \App\Enums\PaymentOrigin::ManualEntered->value,
+                'reference' => $row['reference'] ?? null,
+            ];
+        }
+
+        usort($rows, fn (array $a, array $b) => strcmp($a['planned_date'], $b['planned_date']));
+
+        return $rows;
+    }
+
+    public function show(
+        Request $request,
+        int $loan,
+        LoanBalanceService $balanceService,
+        DefaultInterestService $defaultInterestService,
+    ): View {
         $user = $this->currentUser($request);
         $tab = (string) $request->query('tab', 'uebersicht');
+        if (! in_array($tab, self::TABS, true)) {
+            $tab = 'uebersicht';
+        }
 
         $relations = [
             'lender', 'borrower', 'loanType', 'handler', 'interestTerms',
@@ -237,6 +307,15 @@ class LoanController extends Controller
         ];
 
         $data = array_merge($data, match ($tab) {
+            'uebersicht' => [
+                // Verzugszinsen (Abschnitt 44): berechneter Stand zum heutigen
+                // Tag und die fehlenden fachlichen Vorgaben für den Hinweis.
+                'defaultInterest' => $defaultInterestService->calculate($model),
+                'defaultInterestBooked' => $balances['default_interest'] ?? '0.00',
+                'defaultInterestBasisLabel' => $defaultInterestService->basisLabel($model),
+                'defaultInterestModeLabel' => $defaultInterestService->modeLabel($model),
+            ],
+            'dokumente' => ['statementDocuments' => $this->statementDocuments($model)],
             'konto' => ['accountRows' => $this->accountRows($model)],
             'soll-ist' => ['interestItems' => $model->repaymentPlanItems->where('item_type', \App\Enums\RepaymentItemType::Interest)],
             'zinsen' => ['interestItems' => $model->repaymentPlanItems->where('item_type', \App\Enums\RepaymentItemType::Interest)],
@@ -280,10 +359,20 @@ class LoanController extends Controller
             unset($data['risk_rating'], $data['internal_notes']);
         }
 
+        // Pflichtfelder mit Vorgabewert nie auf null setzen (Spalten sind NOT NULL)
+        foreach (['default_interest_basis' => DefaultInterestService::BASIS_OVERDUE_TOTAL,
+            'default_interest_mode' => DefaultInterestService::MODE_MANUAL] as $field => $fallback) {
+            if (array_key_exists($field, $data) && ! $data[$field]) {
+                $data[$field] = $fallback;
+            }
+        }
+
         $financeFields = [
             'principal_amount', 'credit_limit', 'effective_from', 'due_date', 'contract_end',
             'term_months', 'interest_method', 'interest_frequency', 'repayment_model',
-            'default_interest_enabled', 'default_interest_rate', 'disbursement_date',
+            'default_interest_enabled', 'default_interest_rate', 'default_interest_start',
+            'default_interest_basis', 'default_interest_method', 'default_interest_mode',
+            'disbursement_date',
         ];
 
         $old = $model->only(array_keys($data));
@@ -309,8 +398,11 @@ class LoanController extends Controller
     }
 
     /** Statuswechsel (Abschnitt 21): immer über transitionStatus, mit Historie. */
-    public function transition(TransitionLoanRequest $request, int $loan): RedirectResponse
-    {
+    public function transition(
+        TransitionLoanRequest $request,
+        int $loan,
+        LoanRecalculationService $recalculationService,
+    ): RedirectResponse {
         $user = $this->currentUser($request);
         $model = $this->loanFor($user, $loan);
         $to = LoanStatus::from($request->validated('status'));
@@ -335,19 +427,75 @@ class LoanController extends Controller
             ['note' => $request->validated('note')],
         );
 
+        // Neuberechnung nach finanzwirksamen Statuswechseln (Abschnitt 35),
+        // insbesondere bei Stundung. Frühestes betroffenes Datum ist das
+        // Wirkungsdatum des Wechsels, sonst der Wirkungsbeginn.
+        if (in_array($to->value, self::FINANCIAL_STATUSES, true)) {
+            $earliest = $effectiveDate ?: $model->effective_from;
+            $recalculationService->recalculate(
+                $model,
+                'loans.status_changed',
+                $earliest ? Carbon::parse($earliest) : null,
+                $user,
+            );
+        }
+
         return redirect()
             ->route('loans.show', $model)
             ->with('success', 'Status wurde auf "'.$to->label().'" geändert.');
     }
 
-    /** Manuelle Neuberechnung (Abschnitt 36): Button auf der Detailseite. */
+    /**
+     * Manuelle Neuberechnung (Abschnitt 36): Button auf der Detailseite.
+     *
+     * Zusätzlich (Abschnitt 44) die ausdrückliche Berechnung und Buchung der
+     * Verzugszinsen zum gewählten Stichtag über dasselbe Formular
+     * (Feld book_default_interest, optional default_interest_as_of).
+     * Ohne erfassten Satz und ohne Verzugsbeginn wird nichts berechnet.
+     */
     public function recalculate(
         Request $request,
         int $loan,
         LoanRecalculationService $recalculationService,
+        DefaultInterestService $defaultInterestService,
     ): RedirectResponse {
         $user = $this->currentUser($request);
         $model = $this->loanFor($user, $loan);
+
+        $validated = $request->validate(
+            [
+                'book_default_interest' => ['nullable', 'boolean'],
+                'default_interest_as_of' => ['nullable', 'date'],
+            ],
+            ['default_interest_as_of.date' => 'Der Stichtag für die Verzugszinsen muss ein gültiges Datum sein.'],
+        );
+
+        // Verzugszinsen ausdrücklich berechnen und buchen
+        if ($request->boolean('book_default_interest')) {
+            $missing = $defaultInterestService->missingRequirements($model);
+            if ($missing !== []) {
+                return back()->with('danger', 'Verzugszinsen wurden nicht berechnet. '.implode(' ', $missing));
+            }
+
+            $asOf = ! empty($validated['default_interest_as_of'])
+                ? Carbon::parse($validated['default_interest_as_of'])
+                : Carbon::today();
+
+            $calculation = $defaultInterestService->calculate($model, $asOf);
+            $defaultInterestService->book($model, $asOf, $user);
+
+            $recalculationService->recalculate(
+                $model,
+                'default_interest.booked',
+                $model->default_interest_start ? Carbon::parse($model->default_interest_start) : null,
+                $user,
+            );
+
+            return redirect()
+                ->route('loans.show', [$model, 'tab' => 'konto'])
+                ->with('success', 'Verzugszinsen zum '.format_date($asOf).' wurden berechnet: '
+                    .format_money($calculation['amount']).'. Der Stand ist im Darlehenskonto gebucht.');
+        }
 
         $recalculationService->recalculate(
             $model,
@@ -403,6 +551,24 @@ class LoanController extends Controller
         $allowed = self::TRANSITIONS[$loan->status->value] ?? [];
 
         return array_map(fn (string $status) => LoanStatus::from($status), $allowed);
+    }
+
+    /**
+     * Frühere Forderungsaufstellungen (Abschnitt 39): unveränderliche
+     * Snapshots aus dem Dokumentenmodul, neueste zuerst.
+     *
+     * @return \Illuminate\Support\Collection<int, \App\Models\Document>
+     */
+    private function statementDocuments(Loan $loan): \Illuminate\Support\Collection
+    {
+        return \App\Models\Document::query()
+            ->where('category', LoanStatementController::SNAPSHOT_CATEGORY)
+            ->whereHas('links', fn ($q) => $q
+                ->where('linkable_type', $loan->getMorphClass())
+                ->where('linkable_id', $loan->getKey()))
+            ->orderByDesc('document_date')
+            ->orderByDesc('id')
+            ->get();
     }
 
     /** Darlehenskonto (Abschnitt 48): chronologisch mit laufendem Saldo. */

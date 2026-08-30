@@ -27,6 +27,20 @@
             </div>
         </div>
         <div class="col-12 col-lg-4">
+            @can('admin.settings')
+                <div class="card mb-3">
+                    <div class="card-header">Erste-Schritte-Assistent</div>
+                    <div class="card-body">
+                        <p class="small text-muted mb-2">
+                            Zehn Schritte für den Aufbau des Datenbestands, mit Erledigungsstand
+                            aus den vorhandenen Daten.
+                        </p>
+                        <a href="{{ route('onboarding.index') }}" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-flag"></i> Assistent öffnen
+                        </a>
+                    </div>
+                </div>
+            @endcan
             <div class="card mb-3">
                 <div class="card-header">Fragen und Antworten</div>
                 <div class="card-body">

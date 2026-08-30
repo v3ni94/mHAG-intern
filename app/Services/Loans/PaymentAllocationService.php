@@ -50,7 +50,10 @@ class PaymentAllocationService
         RepaymentItemStatus::Late,
     ];
 
-    public function __construct(protected InterestCalculationService $interest) {}
+    public function __construct(
+        protected InterestCalculationService $interest,
+        protected ScheduleActualService $scheduleActuals,
+    ) {}
 
     /**
      * Verrechnet eine Zahlung. manualBuckets erlaubt eine manuelle Aufteilung
@@ -145,6 +148,10 @@ class PaymentAllocationService
             $itemIds = $payment->allocations()->whereNotNull('repayment_plan_item_id')->pluck('repayment_plan_item_id')->unique();
             foreach (RepaymentPlanItem::query()->whereIn('id', $itemIds)->get() as $item) {
                 $this->rebuildItemActuals($item, $reason);
+                // Wirkung im Darlehenskonto an den neuen IST-Stand angleichen:
+                // eine zuvor aus der Planzeile selbst gebuchte Wirkung wird
+                // per Gegenbuchung aufgehoben (Abschnitt 49).
+                $this->scheduleActuals->reconcile($item, $user, 'Zahlung storniert');
             }
 
             AuditService::log('payments.cancelled', $payment, [], [], ['reason' => $reason]);

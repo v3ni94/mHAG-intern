@@ -16,12 +16,26 @@
     </form>
 
     @if ($term !== '')
+        <p class="small text-muted">
+            @php($total = $pageResults->count() + $faqResults->count())
+            {{ $total }} {{ $total === 1 ? 'Treffer' : 'Treffer' }} für "{{ $term }}"
+            @if (! empty($terms))
+                (gesucht wurde nach den Begriffen: {{ implode(', ', $terms) }})
+            @endif
+        </p>
+
         <h2 class="h6 text-uppercase text-muted">Anleitungen</h2>
         @if ($pageResults->isNotEmpty())
             <div class="list-group mb-4">
                 @foreach ($pageResults as $result)
                     <a href="{{ route('help.page', $result['slug']) }}" class="list-group-item list-group-item-action">
-                        <i class="bi bi-journal-text me-1 text-secondary"></i> {{ $result['title'] }}
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-journal-text text-secondary"></i>
+                            <span class="fw-semibold">{{ $result['title'] }}</span>
+                        </div>
+                        @if ($result['excerpt'] !== '')
+                            <div class="small text-muted mt-1">{{ $result['excerpt'] }}</div>
+                        @endif
                     </a>
                 @endforeach
             </div>
@@ -32,7 +46,8 @@
         <h2 class="h6 text-uppercase text-muted">FAQ</h2>
         @if ($faqResults->isNotEmpty())
             <div class="accordion mb-4" id="faq-results">
-                @foreach ($faqResults as $entry)
+                @foreach ($faqResults as $result)
+                    @php($entry = $result['entry'])
                     <div class="accordion-item">
                         <h3 class="accordion-header">
                             <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
@@ -44,12 +59,15 @@
                             <div class="accordion-body">{!! nl2br(e($entry->answer)) !!}</div>
                         </div>
                     </div>
+                    @if ($result['excerpt'] !== '')
+                        <div class="small text-muted px-3 py-1 border-start border-end">{{ $result['excerpt'] }}</div>
+                    @endif
                 @endforeach
             </div>
         @else
             <p class="text-muted small">Keine passenden FAQ-Einträge gefunden.</p>
         @endif
     @else
-        <p class="text-muted">Bitte geben Sie einen Suchbegriff mit mindestens zwei Zeichen ein, zum Beispiel "Zinsen nicht bezahlt".</p>
+        <p class="text-muted">Bitte geben Sie einen Suchbegriff mit mindestens drei Zeichen ein, zum Beispiel "Zinsen nicht bezahlt".</p>
     @endif
 @endsection

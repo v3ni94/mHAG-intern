@@ -90,7 +90,12 @@
                         :hint="! empty($balances['next_due_amount']) && \App\Support\Money::isPositive($balances['next_due_amount']) ? format_money($balances['next_due_amount']) : null" />
         </div>
         <div class="col-6 col-md-3 col-xl">
-            <x-kpi-card label="Gesamtforderung" :value="format_money($balances['total_receivable'] ?? '0.00')" />
+            <x-kpi-card label="Kontostand" :value="format_money($balances['account_balance'] ?? '0.00')"
+                        help="Summe aller Buchungen des Darlehenskontos bis heute: Auszahlungen, Tilgungen, Zahlungen, Zinszuschreibungen, Verzugszinsen und Stornos. Enthält nur, was tatsächlich gebucht ist." />
+        </div>
+        <div class="col-6 col-md-3 col-xl">
+            <x-kpi-card label="Gesamtforderung" :value="format_money($balances['total_receivable'] ?? '0.00')"
+                        help="Kontostand zuzüglich der bis heute entstandenen, aber noch nicht gebuchten Soll-Positionen aus dem Zahlungsplan, also offene Zinsen und Gebühren. Deshalb regelmäßig höher als der Kontostand." />
         </div>
     </div>
 

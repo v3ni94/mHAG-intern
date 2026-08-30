@@ -40,6 +40,64 @@ class UiLoanCrudTest extends LoansUiTestCase
         $response->assertDontSee($anderes->loan_number);
     }
 
+    public function test_index_zeigt_kontostand_und_sortiert_danach(): void
+    {
+        // Ohne Mock des Saldo-Dienstes: der Kontostand wird echt gerechnet.
+        $user = $this->makeInternalUser();
+        $lender = $this->makeEntity('Müller Holding AG');
+        $borrower = $this->makeEntity('Beispiel GmbH');
+
+        $klein = $this->makeLoan($lender, $borrower, ['title' => 'Kleines Darlehen']);
+        $gross = $this->makeLoan($lender, $borrower, ['title' => 'Großes Darlehen']);
+
+        \App\Models\LoanTransaction::create([
+            'loan_id' => $klein->id, 'booking_type' => 'disbursement',
+            'booking_date' => now()->subMonth()->toDateString(),
+            'effective_date' => now()->subMonth()->toDateString(),
+            'amount' => '20000.00', 'description' => 'Auszahlung',
+        ]);
+        \App\Models\LoanTransaction::create([
+            'loan_id' => $gross->id, 'booking_type' => 'disbursement',
+            'booking_date' => now()->subMonth()->toDateString(),
+            'effective_date' => now()->subMonth()->toDateString(),
+            'amount' => '80000.00', 'description' => 'Auszahlung',
+        ]);
+        \App\Models\LoanTransaction::create([
+            'loan_id' => $gross->id, 'booking_type' => 'repayment',
+            'booking_date' => now()->subDays(5)->toDateString(),
+            'effective_date' => now()->subDays(5)->toDateString(),
+            'amount' => '-5000.00', 'description' => 'Tilgung',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('loans.index'));
+        $response->assertOk();
+        $response->assertSee('Kontostand');
+        $response->assertSee('20.000,00');
+        // 80.000,00 - 5.000,00 = 75.000,00
+        $response->assertSee('75.000,00');
+
+        // Absteigend sortiert steht das Darlehen mit dem hoeheren Kontostand vorn
+        $response = $this->actingAs($user)->get(route('loans.index', ['sort' => 'account_balance', 'dir' => 'desc']));
+        $response->assertOk();
+        $response->assertSeeInOrder([$gross->loan_number, $klein->loan_number]);
+
+        $response = $this->actingAs($user)->get(route('loans.index', ['sort' => 'account_balance', 'dir' => 'asc']));
+        $response->assertOk();
+        $response->assertSeeInOrder([$klein->loan_number, $gross->loan_number]);
+    }
+
+    public function test_index_ignoriert_unzulaessige_sortierspalte(): void
+    {
+        $user = $this->makeInternalUser();
+        $lender = $this->makeEntity('Müller Holding AG');
+        $borrower = $this->makeEntity('Beispiel GmbH');
+        $this->makeLoan($lender, $borrower);
+
+        $response = $this->actingAs($user)->get(route('loans.index', ['sort' => 'internal_notes', 'dir' => 'asc']));
+
+        $response->assertOk();
+    }
+
     public function test_create_formular_wird_angezeigt(): void
     {
         $this->mockLoanServices();

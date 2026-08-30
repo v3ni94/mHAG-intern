@@ -56,12 +56,39 @@
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead>
+                    @php
+                        $sortLink = function (string $column) use ($filters, $sort, $direction) {
+                            $next = ($sort === $column && $direction === 'desc') ? 'asc' : 'desc';
+
+                            return route('loans.index', array_merge(array_filter($filters, fn ($v) => $v !== null && $v !== ''), [
+                                'sort' => $column,
+                                'dir' => $next,
+                            ]));
+                        };
+                        $sortIcon = fn (string $column) => $sort === $column
+                            ? ($direction === 'asc' ? 'bi-sort-up' : 'bi-sort-down')
+                            : 'bi-dash';
+                    @endphp
                     <tr>
-                        <th>Nummer</th>
+                        <th>
+                            <a href="{{ $sortLink('loan_number') }}" class="text-decoration-none text-reset">
+                                Nummer <i class="bi {{ $sortIcon('loan_number') }} small"></i>
+                            </a>
+                        </th>
                         <th>Bezeichnung</th>
                         <th>Darlehensgeber</th>
                         <th>Darlehensnehmer</th>
-                        <th class="text-end">Darlehenssumme</th>
+                        <th class="text-end">
+                            <a href="{{ $sortLink('principal_amount') }}" class="text-decoration-none text-reset">
+                                Darlehenssumme <i class="bi {{ $sortIcon('principal_amount') }} small"></i>
+                            </a>
+                        </th>
+                        <th class="text-end">
+                            <a href="{{ $sortLink('account_balance') }}" class="text-decoration-none text-reset">
+                                Kontostand <i class="bi {{ $sortIcon('account_balance') }} small"></i>
+                            </a>
+                            <x-help-icon text="Summe aller Buchungen des Darlehenskontos bis heute. Enthält nur, was tatsächlich gebucht ist; noch nicht gebuchte offene Zinsen und Gebühren sind nicht enthalten." />
+                        </th>
                         <th>Fälligkeit</th>
                         <th>Status</th>
                         @if ($isInternal)
@@ -77,6 +104,9 @@
                             <td>{{ $loan->lender?->display_name }}</td>
                             <td>{{ $loan->borrower?->display_name }}</td>
                             <td class="text-end"><x-money :amount="$loan->principal_amount" :currency="$loan->currency" /></td>
+                            <td class="text-end fw-semibold">
+                                <x-money :amount="$accountBalances[$loan->id] ?? '0.00'" :currency="$loan->currency" />
+                            </td>
                             <td>{{ $loan->due_date ? format_date($loan->due_date) : ($loan->contract_end ? format_date($loan->contract_end) : 'unbefristet') }}</td>
                             <td><x-enum-badge :enum="$loan->status" /></td>
                             @if ($isInternal)
@@ -89,7 +119,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ $isInternal ? 8 : 7 }}">
+                            <td colspan="{{ $isInternal ? 9 : 8 }}">
                                 <x-empty-state icon="bi-cash-stack" message="Keine Darlehen gefunden." />
                             </td>
                         </tr>

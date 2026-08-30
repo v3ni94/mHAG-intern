@@ -114,6 +114,24 @@ die Prüfung, dass die Forderungsaufstellung nicht doppelt zählt.
   Performance beachten: Aggregation je Darlehen in einer Abfrage, keine
   Berechnung je Zeile.
 
+**Umgesetzt am 30.08.2026.**
+
+- `LoanBalanceService::accountBalance()` liefert den Kontostand zu jedem
+  Stichtag, `balances()` weist ihn als `account_balance` aus.
+- Beide Kennzahlen stehen mit Hilfe-Symbol und Erläuterung nebeneinander in der
+  KPI-Zeile der Detailseite.
+- Für die Liste gibt es `accountBalancesFor()`: eine Abfrage für alle
+  angezeigten Darlehen. Summiert wird bewusst mit BCMath in PHP und nicht mit
+  `SUM()` in der Datenbank, weil SQLite dabei auf Gleitkommazahlen ausweicht
+  (eiserne Regel 1). Für die Sortierung genügt die Summierung in der
+  Datenbank; angezeigt wird stets der exakt gebildete Wert.
+- Sortierbar sind Nummer, Darlehenssumme und Kontostand. Unzulässige
+  Sortierangaben werden ignoriert, es bleibt bei der Standardsortierung.
+
+Belegt durch `tests/Feature/Loans/EngineAccountBalanceTest.php` (5 Tests,
+darunter die Zusicherung, dass die Liste nur eine Abfrage auslöst) und zwei
+Listentests in `tests/Feature/Loans/UiLoanCrudTest.php`.
+
 ## 4. Ertrag und Rendite
 
 Neue Auswertung je Darlehen (Tab "Ertrag") und als Report über alle sichtbaren

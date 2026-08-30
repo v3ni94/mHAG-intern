@@ -82,7 +82,10 @@ class LoanController extends Controller
         return $user;
     }
 
-    public function index(Request $request): View
+    /** Sortierbare Spalten der Darlehensliste. */
+    public const SORTABLE = ['loan_number', 'principal_amount', 'account_balance'];
+
+    public function index(Request $request, LoanBalanceService $balanceService): View
     {
         $user = $this->currentUser($request);
 
@@ -92,6 +95,11 @@ class LoanController extends Controller
             'borrower_entity_id' => $request->query('borrower_entity_id'),
             'q' => trim((string) $request->query('q')),
         ];
+
+        $sort = in_array($request->query('sort'), self::SORTABLE, true)
+            ? (string) $request->query('sort')
+            : 'loan_number';
+        $direction = $request->query('dir') === 'asc' ? 'asc' : 'desc';
 
         $loans = Loan::visibleTo($user)
             ->with(['lender', 'borrower', 'loanType'])
@@ -104,13 +112,31 @@ class LoanController extends Controller
                         ->orWhere('title', 'like', '%'.$filters['q'].'%');
                 });
             })
-            ->orderByDesc('loan_number')
+            ->when(
+                $sort === 'account_balance',
+                // Sortiert wird in der Datenbank, angezeigt wird der mit BCMath
+                // exakt gebildete Wert. Fuer die Reihenfolge genuegt die
+                // Summierung in der Datenbank.
+                fn ($q) => $q->orderByRaw(
+                    '(select coalesce(sum(amount), 0) from loan_transactions'
+                    .' where loan_transactions.loan_id = loans.id'
+                    .' and loan_transactions.effective_date <= ?) '.$direction,
+                    [today()->toDateString()],
+                ),
+                fn ($q) => $q->orderBy($sort, $direction),
+            )
             ->paginate(25)
             ->withQueryString();
 
         return view('loans.index', [
             'loans' => $loans,
             'filters' => $filters,
+            'sort' => $sort,
+            'direction' => $direction,
+            // Kontostaende aller angezeigten Darlehen in einer Abfrage
+            'accountBalances' => $balanceService->accountBalancesFor(
+                $loans->pluck('id')->all(),
+            ),
             'statuses' => LoanStatus::cases(),
             'entities' => Entity::visibleTo($user)->orderBy('display_name')->get(['id', 'display_name']),
             'isInternal' => $user->isInternal(),

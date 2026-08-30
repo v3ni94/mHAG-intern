@@ -118,6 +118,8 @@ abstract class LoansUiTestCase extends TestCase
             $mock->shouldReceive('statementRows')->andReturn(['rows' => [
                 ['label' => 'Kapital', 'amount' => '100000.00', 'sign' => '+'],
             ], 'total' => '100000.00'])->byDefault();
+            $mock->shouldReceive('accountBalance')->andReturn('100000.00')->byDefault();
+            $mock->shouldReceive('accountBalancesFor')->andReturn([])->byDefault();
         });
         $mocks['recalculation'] = $this->mock(\App\Services\Loans\LoanRecalculationService::class, function ($mock) {
             $mock->shouldReceive('recalculate')->andReturn(new \App\Models\LoanRecalculation)->byDefault();
@@ -147,10 +149,14 @@ abstract class LoansUiTestCase extends TestCase
             'interest_confirmed' => '2000.00',
             'interest_assumed' => '500.00',
             'interest_open' => '500.00',
+            'interest_capitalized' => '0.00',
+            'capitalized' => '0.00',
+            'written_off' => '0.00',
             'fees_charged' => '0.00',
             'fees_paid' => '0.00',
             'fees_open' => '0.00',
             'default_interest' => '0.00',
+            'account_balance' => '100000.00',
             'payments_received' => '2000.00',
             'total_receivable' => '100500.00',
             'overdue_amount' => '0.00',

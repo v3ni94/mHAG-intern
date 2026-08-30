@@ -46,8 +46,9 @@ class LoanBalanceService
      * Keys: disbursed, repaid, capitalized, principal_outstanding,
      * interest_charged, interest_confirmed, interest_assumed, interest_open,
      * interest_capitalized, fees_charged,
-     * fees_paid, fees_open, default_interest, payments_received,
-     * total_receivable, overdue_amount, next_due_date, next_due_amount.
+     * fees_paid, fees_open, default_interest, account_balance,
+     * payments_received, total_receivable, overdue_amount, next_due_date,
+     * next_due_amount.
      */
     public function balances(Loan $loan, ?CarbonInterface $asOf = null): array
     {
@@ -116,6 +117,7 @@ class LoanBalanceService
         );
 
         [$nextDueDate, $nextDueAmount] = $this->nextDue($loan, $asOfStr);
+        $accountBalance = $this->accountBalance($loan, Carbon::parse($asOfStr));
 
         $totalReceivable = Money::add(
             Money::add($capital['principal_outstanding'], $interestOpen),
@@ -137,12 +139,65 @@ class LoanBalanceService
             'fees_paid' => $feesPaid,
             'fees_open' => $feesOpen,
             'default_interest' => $capital['default_interest'],
+            'account_balance' => $accountBalance,
             'payments_received' => $paymentsReceived,
             'total_receivable' => $totalReceivable,
             'overdue_amount' => $overdue,
             'next_due_date' => $nextDueDate,
             'next_due_amount' => $nextDueAmount,
         ];
+    }
+
+    /**
+     * Kontostand des Darlehenskontos zum Stichtag: die Summe aller Buchungen
+     * mit Wirkungsdatum bis einschliesslich Stichtag (Forderungssicht, ein
+     * positiver Wert ist eine Forderung des Darlehensgebers).
+     *
+     * Abgrenzung zur Gesamtforderung: der Kontostand enthaelt ausschliesslich
+     * das, was tatsaechlich gebucht ist. Die Gesamtforderung enthaelt
+     * zusaetzlich die bis zum Stichtag entstandenen, aber noch nicht
+     * gebuchten Soll-Positionen aus dem Zahlungsplan (offene Zinsen und
+     * Gebuehren). Beide Zahlen sind deshalb regelmaessig verschieden.
+     */
+    public function accountBalance(Loan $loan, ?CarbonInterface $asOf = null): string
+    {
+        $asOfStr = ($asOf ? Carbon::parse($asOf->toDateString()) : today())->toDateString();
+
+        return Money::sum(
+            $loan->transactions()
+                ->whereDate('effective_date', '<=', $asOfStr)
+                ->pluck('amount'),
+        );
+    }
+
+    /**
+     * Kontostaende mehrerer Darlehen zum Stichtag in EINER Abfrage. Fuer
+     * Listen: keine Abfrage je Zeile. Summiert wird mit BCMath in PHP, nicht
+     * mit SUM() in der Datenbank, weil SQLite dabei auf Gleitkommazahlen
+     * ausweicht (eiserne Regel 1: nie float bei Geld).
+     *
+     * @param  array<int, int>  $loanIds
+     * @return array<int, string>  Kontostand je Darlehens-ID
+     */
+    public function accountBalancesFor(array $loanIds, ?CarbonInterface $asOf = null): array
+    {
+        if ($loanIds === []) {
+            return [];
+        }
+
+        $asOfStr = ($asOf ? Carbon::parse($asOf->toDateString()) : today())->toDateString();
+
+        $balances = array_fill_keys($loanIds, '0.00');
+        $rows = \App\Models\LoanTransaction::query()
+            ->whereIn('loan_id', $loanIds)
+            ->whereDate('effective_date', '<=', $asOfStr)
+            ->get(['loan_id', 'amount']);
+
+        foreach ($rows as $row) {
+            $balances[$row->loan_id] = Money::add($balances[$row->loan_id] ?? '0.00', $row->amount);
+        }
+
+        return $balances;
     }
 
     /**

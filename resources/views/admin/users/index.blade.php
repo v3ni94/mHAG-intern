@@ -60,7 +60,9 @@
                                 @endforeach
                             </td>
                             <td>
-                                @if ($user->hasTwoFactorEnabled())
+                                @if ($user->hasUnreadableTwoFactorSecret())
+                                    <x-status-badge severity="danger" label="Nicht lesbar" />
+                                @elseif ($user->hasTwoFactorEnabled())
                                     <x-status-badge severity="success" label="Aktiv" />
                                 @else
                                     <x-status-badge severity="neutral" label="Nicht eingerichtet" />

@@ -24,6 +24,14 @@
                         <dt class="col-5">Zwei-Faktor-Authentifizierung</dt>
                         <dd class="col-7">
                             @if ($user->hasTwoFactorEnabled())<x-status-badge severity="success" label="Eingerichtet" />@else<x-status-badge severity="neutral" label="Nicht eingerichtet" />@endif
+                            @if ($user->hasUnreadableTwoFactorSecret())
+                                <x-status-badge severity="danger" label="Geheimnis nicht lesbar" />
+                                <div class="form-text">Das hinterlegte Geheimnis kann nicht
+                                entschlüsselt werden, typischerweise nach einem Wechsel des
+                                Anwendungsschlüssels. Eine Anmeldung mit zweitem Faktor ist für
+                                dieses Konto nicht möglich. Zurücksetzen, damit der Benutzer neu
+                                einrichten kann.</div>
+                            @endif
                         </dd>
                         <dt class="col-5">Zugeordnete Entität</dt>
                         <dd class="col-7">{{ $user->entity?->display_name ?? 'keine' }}</dd>
@@ -97,7 +105,7 @@
                                         label="Passwort-Link senden" icon="bi-key"
                                         class="btn btn-sm btn-outline-secondary" />
 
-                                    @if ($user->hasTwoFactorEnabled())
+                                    @if ($user->hasTwoFactorSecretStored())
                                         <x-confirm-form :action="route('admin.users.reset-two-factor', $user)"
                                             confirm="Zwei-Faktor-Authentifizierung wirklich zurücksetzen? Der Benutzer muss sie danach neu einrichten. Nur bei Geräteverlust verwenden."
                                             label="2FA zurücksetzen" icon="bi-shield-exclamation"

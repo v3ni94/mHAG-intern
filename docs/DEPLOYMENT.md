@@ -244,6 +244,43 @@ unlesbar. In dieser Anwendung sind das ausschließlich die Geheimnisse der
 Zwei-Faktor-Anmeldung; sie sind danach je Benutzer zurückzusetzen. Fachdaten,
 Beträge und Dokumente liegen unverschlüsselt und sind nicht betroffen.
 
+## 6c. Nach einem Wechsel des Anwendungsschlüssels
+
+Ein Wechsel von `APP_KEY` macht alle mit dem alten Schlüssel verschlüsselten
+Felder unlesbar. In dieser Anwendung sind das ausschließlich
+`users.two_factor_secret` und `users.two_factor_recovery_codes`. Fachdaten,
+Beträge und Dokumente liegen unverschlüsselt und sind nicht betroffen.
+
+Zwei Wege:
+
+1. **Verlustfrei, wenn der alte Schlüssel noch bekannt ist.** In der `.env`
+   `APP_PREVIOUS_KEYS=base64:<alter Schlüssel>` setzen (mehrere mit Komma
+   getrennt). Laravel liest die Felder damit weiter und legt sie beim nächsten
+   Schreiben mit dem neuen Schlüssel ab. Es ist nichts zurückzusetzen.
+2. **Zurücksetzen, wenn der alte Schlüssel verloren ist.** Je Benutzer über
+   Administration, Benutzer, "2FA zurücksetzen", oder gesammelt über
+   `tools/web-setup/notfall.php`. Jeder Vorgang wird im Prüfpfad festgehalten.
+   Die Benutzer richten die Zwei-Faktor-Anmeldung danach neu ein.
+
+### Warum ein unlesbares Feld früher die ganze Anwendung ausgeschaltet hat
+
+Der Cast `encrypted` entschlüsselt beim Lesen. Eine `DecryptException` wurde
+nirgends abgefangen, deshalb genügte ein einziger nicht lesbarer Datensatz, um
+die Anmeldung, die Benutzerverwaltung und über die Middleware für die
+Zwei-Faktor-Pflicht jede weitere Seite mit einem Serverfehler 500 auszuschalten.
+
+Zwei Punkte sind dabei nicht offensichtlich:
+
+- **Auch das Schreiben bricht ab.** `Model::save()` vergleicht den neuen mit dem
+  bisherigen Wert (`HasAttributes::originalIsEquivalent`) und entschlüsselt dazu
+  beide. Selbst die Neueinrichtung, also der Weg aus dem Zustand heraus, schlug
+  daran fehl. Ein Leeren des Feldes ist dagegen unkritisch, weil der Vergleich
+  bei einem neuen Wert `null` vorher abbricht. `User::saveTwoFactorFields()`
+  nutzt genau das.
+- **Der zweite Faktor bleibt bestehen.** `hasTwoFactorEnabled()` liefert auch bei
+  unlesbarem Geheimnis `true`. Andernfalls käme man durch Austausch des
+  Anwendungsschlüssels ohne zweiten Faktor hinein.
+
 ## 7. Überwachung
 
 - Admin-Bereich: Systemstatus (DB, Queue, Backups, SFTP, fehlgeschlagene Logins,

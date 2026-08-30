@@ -23,21 +23,35 @@ class TwoFactorController extends Controller
     public function setup(Request $request): \Illuminate\View\View
     {
         $user = $request->user();
+        $bestaetigt = $user->two_factor_confirmed_at !== null;
 
-        if (! $user->two_factor_secret || $user->two_factor_confirmed_at) {
-            if (! $user->two_factor_confirmed_at) {
-                $user->forceFill([
-                    'two_factor_secret' => app(Google2FA::class)->generateSecretKey(32),
-                ])->save();
-            }
+        /*
+         * Solange die Einrichtung nicht bestätigt ist, kann ein Geheimnis
+         * gefahrlos neu erzeugt werden. Das gilt auch dann, wenn das
+         * vorhandene nach einem Wechsel des Anwendungsschlüssels nicht mehr
+         * lesbar ist: es war nie in Gebrauch.
+         */
+        if (! $bestaetigt && ($user->twoFactorSecret() === null)) {
+            $user->saveTwoFactorFields([
+                'two_factor_secret' => app(Google2FA::class)->generateSecretKey(32),
+            ]);
         }
 
+        /*
+         * Bestätigt und nicht lesbar: hier wird NICHT stillschweigend ein
+         * neues Geheimnis erzeugt. Das würde den vorhandenen zweiten Faktor
+         * ohne Nachweis ersetzen. Die Seite benennt den Zustand, die
+         * Zurücksetzung erfolgt durch die Administration.
+         */
+        $geheimnisNichtLesbar = $user->hasUnreadableTwoFactorSecret();
+
         $qrSvg = null;
-        if (! $user->two_factor_confirmed_at) {
+        $geheimnis = $user->twoFactorSecret();
+        if (! $bestaetigt && $geheimnis !== null) {
             $otpUrl = app(Google2FA::class)->getQRCodeUrl(
                 config('app.name'),
                 $user->email,
-                $user->two_factor_secret,
+                $geheimnis,
             );
             $renderer = new ImageRenderer(new RendererStyle(220), new SvgImageBackEnd);
             $qrSvg = (new Writer($renderer))->writeString($otpUrl);
@@ -46,6 +60,8 @@ class TwoFactorController extends Controller
         return view('auth.two-factor-setup', [
             'user' => $user,
             'qrSvg' => $qrSvg,
+            'geheimnis' => $bestaetigt ? null : $geheimnis,
+            'geheimnisNichtLesbar' => $geheimnisNichtLesbar,
             'recoveryCodes' => session('two_factor:plain_recovery_codes'),
         ]);
     }
@@ -55,7 +71,17 @@ class TwoFactorController extends Controller
         $request->validate(['code' => ['required', 'string']]);
         $user = $request->user();
 
-        if (! app(Google2FA::class)->verifyKey($user->two_factor_secret, $request->input('code'))) {
+        $geheimnis = $user->twoFactorSecret();
+
+        if ($geheimnis === null) {
+            throw ValidationException::withMessages([
+                'code' => 'Das gespeicherte Geheimnis ist nicht lesbar. Das tritt nach einem Wechsel '
+                    .'des Anwendungsschlüssels auf. Bitte wenden Sie sich an die Administration, dort '
+                    .'kann die Zwei-Faktor-Anmeldung für Ihr Konto zurückgesetzt werden.',
+            ]);
+        }
+
+        if (! app(Google2FA::class)->verifyKey($geheimnis, $request->input('code'))) {
             throw ValidationException::withMessages([
                 'code' => 'Der Bestätigungscode ist ungültig. Bitte prüfen Sie die Einrichtung in Ihrer Authenticator-App.',
             ]);
@@ -65,10 +91,10 @@ class TwoFactorController extends Controller
             ->map(fn () => Str::upper(Str::random(5)).'-'.Str::upper(Str::random(5)))
             ->all();
 
-        $user->forceFill([
+        $user->saveTwoFactorFields([
             'two_factor_confirmed_at' => now(),
             'two_factor_recovery_codes' => array_map(fn ($c) => Hash::make($c), $plainCodes),
-        ])->save();
+        ]);
 
         AuditService::log('auth.two_factor_enabled', $user);
 
@@ -89,9 +115,9 @@ class TwoFactorController extends Controller
             ->map(fn () => Str::upper(Str::random(5)).'-'.Str::upper(Str::random(5)))
             ->all();
 
-        $user->forceFill([
+        $user->saveTwoFactorFields([
             'two_factor_recovery_codes' => array_map(fn ($c) => Hash::make($c), $plainCodes),
-        ])->save();
+        ]);
 
         AuditService::log('auth.recovery_codes_regenerated', $user);
 
@@ -110,11 +136,11 @@ class TwoFactorController extends Controller
             ]);
         }
 
-        $user->forceFill([
+        $user->saveTwoFactorFields([
             'two_factor_secret' => null,
             'two_factor_recovery_codes' => null,
             'two_factor_confirmed_at' => null,
-        ])->save();
+        ]);
 
         AuditService::log('auth.two_factor_disabled', $user);
 

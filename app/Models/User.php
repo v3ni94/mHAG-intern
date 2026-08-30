@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -59,9 +60,127 @@ class User extends Authenticatable
         return $this->hasMany(UserInvitation::class);
     }
 
+    /**
+     * Ist ein Geheimnis der Zwei-Faktor-Anmeldung hinterlegt?
+     *
+     * Bewusst über den Rohwert des Feldes. Der Cast 'encrypted' würde
+     * entschlüsseln, und ein mit einem anderen Anwendungsschlüssel erzeugter
+     * Wert wirft dabei eine DecryptException. Für die Frage, OB ein Geheimnis
+     * vorliegt, ist die Entschlüsselung nicht erforderlich.
+     *
+     * Das ist keine Feinheit: vor dieser Trennung genügte ein einziger nicht
+     * lesbarer Datensatz, um die Anmeldung, die Benutzerverwaltung und jede
+     * Seite mit Zwei-Faktor-Pflicht mit einem Serverfehler 500 auszuschalten.
+     */
+    public function hasTwoFactorSecretStored(): bool
+    {
+        return trim((string) ($this->getAttributes()['two_factor_secret'] ?? '')) !== '';
+    }
+
+    /**
+     * Zwei-Faktor-Anmeldung eingerichtet und bestätigt.
+     *
+     * Liefert auch dann true, wenn das Geheimnis nicht lesbar ist. Das ist
+     * beabsichtigt: der zweite Faktor bleibt bestehen. Ein nicht lesbares
+     * Geheimnis darf nicht dazu führen, dass die Anmeldung ohne zweiten
+     * Faktor durchgelassen wird. Geprüft werden kann es dann nicht, dafür
+     * ist die Zurücksetzung durch die Administration vorgesehen.
+     */
     public function hasTwoFactorEnabled(): bool
     {
-        return $this->two_factor_secret !== null && $this->two_factor_confirmed_at !== null;
+        return $this->hasTwoFactorSecretStored() && $this->two_factor_confirmed_at !== null;
+    }
+
+    /**
+     * Entschlüsseltes Geheimnis oder null, wenn keines hinterlegt ist oder es
+     * nicht gelesen werden kann.
+     */
+    public function twoFactorSecret(): ?string
+    {
+        if (! $this->hasTwoFactorSecretStored()) {
+            return null;
+        }
+
+        try {
+            $geheimnis = $this->two_factor_secret;
+        } catch (DecryptException) {
+            return null;
+        }
+
+        return is_string($geheimnis) && $geheimnis !== '' ? $geheimnis : null;
+    }
+
+    /**
+     * Ein Geheimnis ist hinterlegt, lässt sich aber nicht entschlüsseln.
+     * Typischer Anlass: der Anwendungsschlüssel APP_KEY wurde gewechselt.
+     */
+    public function hasUnreadableTwoFactorSecret(): bool
+    {
+        return $this->hasTwoFactorSecretStored() && $this->twoFactorSecret() === null;
+    }
+
+    /**
+     * Felder der Zwei-Faktor-Anmeldung setzen und speichern.
+     *
+     * Zwingend in zwei Schritten, wenn der Bestandswert nicht lesbar ist:
+     * Laravel vergleicht beim Speichern den neuen mit dem bisherigen Wert
+     * (HasAttributes::originalIsEquivalent) und entschlüsselt dazu BEIDE.
+     * Schon dieser Vergleich wirft also, wenn der Bestandswert mit einem
+     * anderen Anwendungsschlüssel erzeugt wurde, und zwar noch bevor der neue
+     * Wert geschrieben ist. Ein Leeren des Feldes ist dagegen unkritisch, weil
+     * der Vergleich bei einem neuen Wert null vorher abbricht.
+     *
+     * Ohne diesen Umweg schlägt sogar die Neueinrichtung fehl, also genau der
+     * Weg, der aus dem Zustand herausführen soll.
+     *
+     * @param  array<string, mixed>  $werte
+     */
+    public function saveTwoFactorFields(array $werte): void
+    {
+        $zuLeeren = [];
+        foreach (['two_factor_secret', 'two_factor_recovery_codes'] as $feld) {
+            if (($werte[$feld] ?? null) !== null && $this->attributeIsUnreadable($feld)) {
+                $zuLeeren[$feld] = null;
+            }
+        }
+
+        if ($zuLeeren !== []) {
+            $this->forceFill($zuLeeren)->save();
+        }
+
+        $this->forceFill($werte)->save();
+    }
+
+    /** Ist ein verschlüsseltes Feld belegt, aber nicht entschlüsselbar? */
+    private function attributeIsUnreadable(string $feld): bool
+    {
+        $roh = $this->getAttributes()[$feld] ?? null;
+        if ($roh === null || trim((string) $roh) === '') {
+            return false;
+        }
+
+        try {
+            $this->getAttribute($feld);
+        } catch (DecryptException) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Gehashte Recovery-Codes. Ein leeres Feld und ein nicht lesbares Feld
+     * sind für den Aufrufer dasselbe: es steht kein verwendbarer Code bereit.
+     *
+     * @return array<int, string|null>
+     */
+    public function twoFactorRecoveryCodes(): array
+    {
+        try {
+            return (array) ($this->two_factor_recovery_codes ?? []);
+        } catch (DecryptException) {
+            return [];
+        }
     }
 
     /**

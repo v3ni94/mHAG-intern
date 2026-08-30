@@ -324,6 +324,112 @@ if ($app !== null) {
 }
 
 // ---------------------------------------------------------------------------
+// Zwei-Faktor-Geheimnisse, die nicht gelesen werden können
+// ---------------------------------------------------------------------------
+/*
+ * Nach einem Wechsel des Anwendungsschluessels sind die mit dem alten
+ * Schluessel verschluesselten Felder nicht mehr lesbar. Betroffen sind die
+ * Geheimnisse der Zwei-Faktor-Anmeldung. Es gibt zwei Wege:
+ *
+ * 1. Verlustfrei: Ist der ALTE Schluessel noch bekannt, in die .env
+ *    aufnehmen als APP_PREVIOUS_KEYS=base64:<alter Schluessel>. Laravel liest
+ *    damit weiter und legt beim naechsten Schreiben mit dem neuen Schluessel
+ *    ab. Nichts ist zurueckzusetzen.
+ * 2. Zuruecksetzen: Ist der alte Schluessel verloren, bleibt nur das
+ *    Zuruecksetzen. Die betroffenen Benutzer richten die Zwei-Faktor-Anmeldung
+ *    danach neu ein.
+ */
+$zweiFaktorBetroffen = null;
+$zweiFaktorFehler = null;
+
+/**
+ * Kennungen der Konten mit hinterlegtem, aber nicht entschlüsselbarem
+ * Geheimnis.
+ *
+ * Bewusst über den Abfragebaukasten und Crypt, NICHT über das Modell: dieses
+ * Werkzeug wird einzeln hochgeladen und muss auch mit einer älteren Fassung
+ * der Anwendung arbeiten, die die entsprechenden Methoden noch nicht kennt.
+ *
+ * @return array<int, int>
+ */
+function nichtLesbareGeheimnisse()
+{
+    $treffer = [];
+
+    $zeilen = Illuminate\Support\Facades\DB::table('users')
+        ->select('id', 'two_factor_secret')
+        ->whereNotNull('two_factor_secret')
+        ->get();
+
+    foreach ($zeilen as $zeile) {
+        $wert = (string) $zeile->two_factor_secret;
+        if (trim($wert) === '') {
+            continue;
+        }
+        try {
+            Illuminate\Support\Facades\Crypt::decryptString($wert);
+        } catch (Throwable $e) {
+            $treffer[] = (int) $zeile->id;
+        }
+    }
+
+    return $treffer;
+}
+
+if ($app !== null) {
+    try {
+        $zweiFaktorBetroffen = count(nichtLesbareGeheimnisse());
+    } catch (Throwable $e) {
+        $zweiFaktorBetroffen = null;
+        $zweiFaktorFehler = $e->getMessage();
+    }
+}
+
+if ($action === 'reset-2fa' && $app !== null) {
+    try {
+        $kennungen = nichtLesbareGeheimnisse();
+
+        foreach ($kennungen as $id) {
+            // Direkt über den Abfragebaukasten: ein Speichern über das Modell
+            // würde den bisherigen Wert zum Vergleich entschlüsseln und dabei
+            // selbst abbrechen.
+            Illuminate\Support\Facades\DB::table('users')->where('id', $id)->update([
+                'two_factor_secret' => null,
+                'two_factor_recovery_codes' => null,
+                'two_factor_confirmed_at' => null,
+            ]);
+
+            try {
+                $benutzer = App\Models\User::withTrashed()->find($id);
+                if ($benutzer !== null) {
+                    App\Services\AuditService::log(
+                        'admin.users.two_factor_reset_unreadable',
+                        $benutzer,
+                        ['two_factor_enabled' => true],
+                        ['two_factor_enabled' => false],
+                        [
+                            'quelle' => 'Notfalldiagnose',
+                            'grund' => 'Geheimnis nach Wechsel des Anwendungsschlüssels nicht lesbar',
+                        ],
+                    );
+                }
+            } catch (Throwable $e) {
+                // Der Prüfpfad darf die Wiederherstellung nicht verhindern.
+                // Die Anzahl wird auf der Seite in jedem Fall benannt.
+            }
+        }
+
+        $meldungen[] = ['ok', 'Für '.count($kennungen).' Konto/Konten wurde die '
+            .'Zwei-Faktor-Anmeldung zurückgesetzt. Die betroffenen Benutzer richten sie bei der '
+            .'nächsten Anmeldung neu ein. Eine automatische Benachrichtigung erfolgt hier nicht, '
+            .'sie ist gesondert zu veranlassen.'];
+        $zweiFaktorBetroffen = 0;
+    } catch (Throwable $e) {
+        $meldungen[] = ['fehler', 'Das Zurücksetzen ist fehlgeschlagen: '.$e->getMessage()];
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Konfiguration wieder zwischenspeichern
 // ---------------------------------------------------------------------------
 if ($action === 'cache-config' && $app !== null) {
@@ -551,6 +657,36 @@ Datei: <?= h($startFehler->getFile()) ?>, Zeile <?= (int) $startFehler->getLine(
                     <button type="submit">Anwendungsschlüssel neu erzeugen</button>
                 </form>
             </div>
+        <?php } ?>
+
+        <?php if (($zweiFaktorBetroffen ?? 0) > 0) { ?>
+            <div class="m fehler" style="margin-top:12px;">
+                <strong>Zwei-Faktor-Anmeldung: <?= (int) $zweiFaktorBetroffen ?> Konto/Konten mit
+                nicht lesbarem Geheimnis.</strong>
+                <p style="margin:8px 0 0;">Das tritt nach einem Wechsel des Anwendungsschlüssels
+                auf. Diese Konten können sich derzeit nicht anmelden. Es gibt zwei Wege:</p>
+                <p style="margin:8px 0 0;"><strong>1. Verlustfrei, wenn der ALTE Schlüssel noch
+                bekannt ist.</strong> In der .env zusätzlich eintragen:
+                <code>APP_PREVIOUS_KEYS=base64:&lt;alter Schlüssel&gt;</code>. Laravel liest die
+                Felder damit weiter und legt sie beim nächsten Schreiben mit dem neuen Schlüssel
+                ab. Es ist dann nichts zurückzusetzen. Danach den Zwischenspeicher bereinigen und
+                diese Seite neu laden.</p>
+                <p style="margin:8px 0 0;"><strong>2. Zurücksetzen, wenn der alte Schlüssel
+                verloren ist.</strong> Die betroffenen Benutzer richten die Zwei-Faktor-Anmeldung
+                danach neu ein. Jeder Vorgang wird im Prüfpfad festgehalten.</p>
+                <form method="POST" style="margin-top:10px;"
+                      onsubmit="return confirm('Zwei-Faktor-Anmeldung für die betroffenen Konten zurücksetzen? Die Benutzer müssen sie danach neu einrichten.');">
+                    <input type="hidden" name="token" value="<?= $tokenEscaped ?>">
+                    <input type="hidden" name="action" value="reset-2fa">
+                    <button type="submit">Zwei-Faktor-Anmeldung der betroffenen Konten zurücksetzen</button>
+                </form>
+            </div>
+        <?php } elseif ($zweiFaktorBetroffen === 0) { ?>
+            <div class="m ok" style="margin-top:12px;">Zwei-Faktor-Anmeldung: kein Konto mit nicht
+                lesbarem Geheimnis.</div>
+        <?php } elseif ($zweiFaktorFehler !== null) { ?>
+            <div class="m warnung" style="margin-top:12px;">Die Zwei-Faktor-Geheimnisse konnten
+                nicht geprüft werden: <?= h($zweiFaktorFehler) ?></div>
         <?php } ?>
 
         <?php if ($proben !== []) { ?>

@@ -7,6 +7,20 @@
         <div class="col-lg-7">
             <div class="card">
                 <div class="card-body">
+                    {{-- Hinterlegtes Geheimnis, das nicht gelesen werden kann. Tritt nach
+                         einem Wechsel des Anwendungsschluessels auf. Es wird hier bewusst
+                         KEIN neues Geheimnis erzeugt: das wuerde den bestehenden zweiten
+                         Faktor ohne Nachweis ersetzen. --}}
+                    @if ($geheimnisNichtLesbar ?? false)
+                        <div class="alert alert-danger">
+                            <strong>Das gespeicherte Geheimnis ist nicht lesbar.</strong>
+                            <p class="mb-0 mt-2">Das tritt auf, wenn der Anwendungsschlüssel der
+                            Installation gewechselt wurde. Die Zwei-Faktor-Anmeldung bleibt für Ihr
+                            Konto bestehen, sie kann aber nicht geprüft werden. Bitte wenden Sie
+                            sich an die Administration, dort wird die Zwei-Faktor-Anmeldung für Ihr
+                            Konto zurückgesetzt. Danach richten Sie sie hier neu ein.</p>
+                        </div>
+                    @endif
                     @if ($user->hasTwoFactorEnabled())
                         <p>
                             <x-status-badge severity="success" label="2FA ist aktiv" />
@@ -23,13 +37,16 @@
                         @else
                             <p class="form-text mt-2">Für Ihre Rolle ist 2FA verpflichtend und kann nicht deaktiviert werden.</p>
                         @endunless
+                    @elseif ($geheimnis === null)
+                        <p class="mb-0 text-muted">Die Einrichtung ist derzeit nicht möglich.
+                        Bitte wenden Sie sich an die Administration.</p>
                     @else
                         <p class="mb-2">Scannen Sie den QR-Code mit einer TOTP-App (Google Authenticator, Microsoft Authenticator, 1Password, Authy u. a.) und bestätigen Sie mit einem Code.</p>
                         <div class="d-flex flex-wrap align-items-start gap-4">
                             <div class="border rounded p-2 bg-white">{!! $qrSvg !!}</div>
                             <div>
                                 <div class="versal-label">Manueller Schlüssel</div>
-                                <code class="user-select-all">{{ $user->two_factor_secret }}</code>
+                                <code class="user-select-all">{{ $geheimnis }}</code>
                                 <form method="POST" action="{{ route('two-factor.confirm') }}" class="mt-3" style="max-width: 240px;">
                                     @csrf
                                     <label for="code" class="form-label required">Bestätigungscode</label>

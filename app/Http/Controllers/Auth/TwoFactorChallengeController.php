@@ -46,17 +46,35 @@ class TwoFactorChallengeController extends Controller
             'recovery_code' => ['nullable', 'string'],
         ]);
 
+        /*
+         * Nicht lesbares Geheimnis: Es wird NICHTS durchgelassen. Der zweite
+         * Faktor bleibt bestehen, er ist nur nicht prüfbar. Der Weg zurück
+         * führt über die Zurücksetzung durch die Administration. Ein
+         * Durchlassen wäre eine Umgehung des zweiten Faktors durch einen
+         * Wechsel des Anwendungsschlüssels.
+         */
+        if ($user->hasUnreadableTwoFactorSecret()) {
+            AuditService::log('auth.two_factor_secret_unreadable', $user);
+
+            throw ValidationException::withMessages([
+                'code' => 'Die Zwei-Faktor-Anmeldung kann derzeit nicht geprüft werden, weil das '
+                    .'gespeicherte Geheimnis nicht lesbar ist. Das tritt nach einem Wechsel des '
+                    .'Anwendungsschlüssels auf. Bitte wenden Sie sich an die Administration, dort '
+                    .'kann die Zwei-Faktor-Anmeldung für Ihr Konto zurückgesetzt werden.',
+            ]);
+        }
+
         $verified = false;
 
         if ($code = trim((string) $request->input('code'))) {
-            $verified = (bool) app(Google2FA::class)->verifyKey($user->two_factor_secret, $code);
+            $verified = (bool) app(Google2FA::class)->verifyKey((string) $user->twoFactorSecret(), $code);
         } elseif ($recovery = trim((string) $request->input('recovery_code'))) {
             // Recovery Codes liegen ausschließlich gehasht vor (Abschnitt 16).
-            $codes = $user->two_factor_recovery_codes ?? [];
+            $codes = $user->twoFactorRecoveryCodes();
             foreach ($codes as $index => $hashed) {
                 if ($hashed !== null && Hash::check($recovery, $hashed)) {
                     $codes[$index] = null; // einmalig verwendbar
-                    $user->forceFill(['two_factor_recovery_codes' => $codes])->save();
+                    $user->saveTwoFactorFields(['two_factor_recovery_codes' => $codes]);
                     $verified = true;
                     AuditService::log('auth.recovery_code_used', $user);
                     break;

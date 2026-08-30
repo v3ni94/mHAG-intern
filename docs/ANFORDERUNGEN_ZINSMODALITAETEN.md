@@ -78,6 +78,31 @@ Wirkungsdatum der Änderung, frühere Perioden bleiben unverändert. Der Wechsel
 löst eine Neuberechnung ab diesem Datum aus und wird im Änderungsprotokoll
 festgehalten.
 
+**Umgesetzt am 30.08.2026.** Präzisierungen gegenüber dem Entwurf:
+
+- Zweites Feld `interest_capitalization_from` (Datum, optional): Wirkungsdatum
+  der Umstellung. Zugeschrieben werden nur Perioden, deren Fälligkeit nicht
+  davor liegt. Ohne Angabe gilt der Wirkungsbeginn, das Darlehen kapitalisiert
+  also von Anfang an. Damit ist die eiserne Regel "Wirkungsdatum vor
+  Erfassungsdatum" gewahrt, ohne die Vergangenheit stillschweigend zu ändern.
+- Die Zuschreibung wirkt **zum Fälligkeitstag**. Dadurch ist der Saldo zu
+  jedem Stichtag in sich geschlossen: die Forderung enthält den Betrag ab dem
+  Tag, an dem die Planzeile als zugeschrieben gilt. Der gebuchte Betrag der
+  abgeschlossenen Periode ist maßgeblich; die Planzeile ist geschützt und wird
+  von der Plangenerierung nicht neu berechnet.
+- Zeilen mit erfasstem IST werden nie in eine Zuschreibung verwandelt. Eine
+  bestätigte Zinszahlung bleibt eine Zahlung.
+- Abschalten beendet nur künftige Zuschreibungen. Gebuchte Zuschreibungen
+  bleiben erhalten (append-only) und sind bei Bedarf per Gegenbuchung
+  aufzuheben.
+- Statuswert `capitalized` ("Dem Kapital zugeschrieben") an den Planzeilen.
+  Er ist weder offen noch überfällig und nimmt an der Zahlungsverrechnung
+  nicht teil.
+
+Belegt durch `tests/Feature/Loans/EngineInterestCapitalizationTest.php`
+(10 Tests), darunter die Handrechnung des Zinseszinses über drei Perioden und
+die Prüfung, dass die Forderungsaufstellung nicht doppelt zählt.
+
 ## 3. Kontostand je Darlehen
 
 - Neue Kennzahl "Kontostand" auf der Darlehensdetailseite: der aktuelle Saldo

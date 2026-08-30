@@ -3,7 +3,8 @@
     <div class="card-header d-flex justify-content-between align-items-center">
         <span>Darlehenskonto (Forderungssicht: + erhöht Forderung, - reduziert)</span>
         <span class="small text-muted">
-            Gebucht werden Auszahlungen, Tilgungen, Zins- und Gebührenzahlungen, Verzugszinsen und Stornos.
+            Gebucht werden Auszahlungen, Tilgungen, Zins- und Gebührenzahlungen, Zinszuschreibungen,
+            Verzugszinsen und Stornos.
             Zins- und Gebühren-Sollstellungen werden im Zahlungsplan geführt.
         </span>
     </div>

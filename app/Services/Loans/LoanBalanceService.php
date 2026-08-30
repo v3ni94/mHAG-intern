@@ -43,8 +43,9 @@ class LoanBalanceService
     /**
      * Alle Werte als Dezimalstrings (2 NK); asOf = null bedeutet heute.
      *
-     * Keys: disbursed, repaid, principal_outstanding, interest_charged,
-     * interest_confirmed, interest_assumed, interest_open, fees_charged,
+     * Keys: disbursed, repaid, capitalized, principal_outstanding,
+     * interest_charged, interest_confirmed, interest_assumed, interest_open,
+     * interest_capitalized, fees_charged,
      * fees_paid, fees_open, default_interest, payments_received,
      * total_receivable, overdue_amount, next_due_date, next_due_amount.
      */
@@ -58,6 +59,7 @@ class LoanBalanceService
         $interestConfirmed = '0.00';
         $interestAssumed = '0.00';
         $interestOpen = '0.00';
+        $interestCapitalized = '0.00';
         $feesCharged = '0.00';
         $feesPaid = '0.00';
         $feesOpen = '0.00';
@@ -81,13 +83,19 @@ class LoanBalanceService
 
             if ($item->item_type === RepaymentItemType::Interest) {
                 $interestCharged = Money::add($interestCharged, $planned);
-                if (in_array($item->status, self::ASSUMED_STATUSES, true)) {
-                    $interestAssumed = Money::add($interestAssumed, $paidEffective);
-                } elseif (in_array($item->status, self::CONFIRMED_STATUSES, true)) {
-                    $interestConfirmed = Money::add($interestConfirmed, $paidEffective);
-                }
-                if ($item->status !== RepaymentItemStatus::Waived) {
-                    $interestOpen = Money::add($interestOpen, $open);
+                if ($item->status === RepaymentItemStatus::Capitalized) {
+                    // Dem Kapital zugeschrieben: keine offene Zinsforderung,
+                    // der Betrag steckt ueber die Buchung im Kapital.
+                    $interestCapitalized = Money::add($interestCapitalized, $planned);
+                } else {
+                    if (in_array($item->status, self::ASSUMED_STATUSES, true)) {
+                        $interestAssumed = Money::add($interestAssumed, $paidEffective);
+                    } elseif (in_array($item->status, self::CONFIRMED_STATUSES, true)) {
+                        $interestConfirmed = Money::add($interestConfirmed, $paidEffective);
+                    }
+                    if ($item->status !== RepaymentItemStatus::Waived) {
+                        $interestOpen = Money::add($interestOpen, $open);
+                    }
                 }
             } elseif ($item->item_type === RepaymentItemType::Fee) {
                 $feesCharged = Money::add($feesCharged, $planned);
@@ -117,11 +125,14 @@ class LoanBalanceService
         return [
             'disbursed' => $capital['disbursed'],
             'repaid' => $capital['repaid'],
+            'capitalized' => $capital['capitalized'],
+            'written_off' => $capital['written_off'],
             'principal_outstanding' => $capital['principal_outstanding'],
             'interest_charged' => $interestCharged,
             'interest_confirmed' => $interestConfirmed,
             'interest_assumed' => $interestAssumed,
             'interest_open' => $interestOpen,
+            'interest_capitalized' => $interestCapitalized,
             'fees_charged' => $feesCharged,
             'fees_paid' => $feesPaid,
             'fees_open' => $feesOpen,
@@ -145,11 +156,20 @@ class LoanBalanceService
         $b = $this->balances($loan, $asOf);
         $capital = $this->capitalComponents($loan, $asOfStr);
 
-        $interestPaidEffective = Money::sub($b['interest_charged'], $b['interest_open']);
+        // Kapitalisierte Zinsen sind in interest_charged enthalten, aber weder
+        // bezahlt noch offen: sie stecken im Kapital. Sie sind deshalb aus dem
+        // rechnerischen Zahlungsbetrag herauszunehmen und gesondert auszuweisen.
+        $interestPaidEffective = Money::sub(
+            Money::sub($b['interest_charged'], $b['interest_open']),
+            $b['interest_capitalized'],
+        );
         $feesPaidEffective = Money::sub($b['fees_charged'], $b['fees_open']);
 
         $rows = [];
         $rows[] = ['label' => 'Ausgezahltes Kapital', 'amount' => $b['disbursed'], 'sign' => '+'];
+        if (Money::isPositive($b['capitalized'])) {
+            $rows[] = ['label' => 'Zugeschriebene Zinsen im valutierten Betrag', 'amount' => $b['capitalized'], 'sign' => '+'];
+        }
         $rows[] = ['label' => 'Vertragszinsen bis '.Carbon::parse($asOfStr)->format('d.m.Y'), 'amount' => $b['interest_charged'], 'sign' => '+'];
         // Verzugszinsen nur ausweisen, wenn tatsaechlich berechnet und gebucht
         // (Abschnitt 143: keine Schein-Positionen). Eine aktivierte, aber
@@ -163,6 +183,13 @@ class LoanBalanceService
         }
         $rows[] = ['label' => 'Tilgungen', 'amount' => $b['repaid'], 'sign' => '-'];
         $rows[] = ['label' => 'Zinszahlungen (inkl. systemseitig angenommener Zahlungen)', 'amount' => $interestPaidEffective, 'sign' => '-'];
+        if (Money::isPositive($b['interest_capitalized'])) {
+            $rows[] = [
+                'label' => 'Kapitalisierte Zinsen, bereits im valutierten Betrag enthalten',
+                'amount' => $b['interest_capitalized'],
+                'sign' => '-',
+            ];
+        }
         if (! Money::isZero($feesPaidEffective)) {
             $rows[] = ['label' => 'Gebührenzahlungen (inkl. systemseitig angenommener Zahlungen)', 'amount' => $feesPaidEffective, 'sign' => '-'];
         }
@@ -181,13 +208,14 @@ class LoanBalanceService
      * Kapitalkomponenten aus loan_transactions bis zum Stichtag (inklusive).
      * Stornos/Korrekturen wirken ueber reversal_of auf die stornierte Buchungsart.
      *
-     * @return array{disbursed: string, repaid: string, written_off: string, principal_outstanding: string, default_interest: string}
+     * @return array{disbursed: string, repaid: string, written_off: string, capitalized: string, principal_outstanding: string, default_interest: string}
      */
     protected function capitalComponents(Loan $loan, string $asOfStr): array
     {
         $disbursed = '0.00';
         $repaid = '0.00';
         $writtenOff = '0.00';
+        $capitalized = '0.00';
         $defaultInterest = '0.00';
 
         $transactions = $loan->transactions()->with('reversalOf')->get();
@@ -206,6 +234,7 @@ class LoanBalanceService
                 BookingType::Disbursement => $disbursed = Money::add($disbursed, $amount),
                 BookingType::Repayment => $repaid = Money::sub($repaid, $amount),
                 BookingType::WriteOff => $writtenOff = Money::sub($writtenOff, $amount),
+                BookingType::InterestCapitalization => $capitalized = Money::add($capitalized, $amount),
                 BookingType::DefaultInterest => $defaultInterest = Money::add($defaultInterest, $amount),
                 default => null,
             };
@@ -215,7 +244,12 @@ class LoanBalanceService
             'disbursed' => $disbursed,
             'repaid' => $repaid,
             'written_off' => $writtenOff,
-            'principal_outstanding' => Money::sub(Money::sub($disbursed, $repaid), $writtenOff),
+            'capitalized' => $capitalized,
+            // Zugeschriebene Zinsen erhoehen das valutierte Kapital.
+            'principal_outstanding' => Money::sub(
+                Money::sub(Money::add($disbursed, $capitalized), $repaid),
+                $writtenOff,
+            ),
             'default_interest' => $defaultInterest,
         ];
     }

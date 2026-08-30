@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
  *
  * Deterministisch: gleiche Eingangsdaten liefern immer dasselbe Ergebnis.
  * Ablauf: Snapshot alt (balances) -> Auszahlungen gem. Abschnitt 24 fortschreiben
+ * -> faellige Zinsen zuschreiben (nur bei Zinskapitalisierung)
  * -> Zahlungsplan neu erzeugen (generate, Zins-SOLL aus Kapitalverlauf)
  * -> rollForwardAssumed -> Snapshot neu -> Protokoll in loan_recalculations.
  * Fehler werden abgefangen und als status=error protokolliert.
@@ -28,6 +29,7 @@ class LoanRecalculationService
         protected LoanScheduleService $schedule,
         protected LoanBalanceService $balance,
         protected DefaultInterestService $defaultInterest,
+        protected InterestCapitalizationService $capitalization,
     ) {}
 
     public function recalculate(Loan $loan, string $trigger, ?CarbonInterface $earliestAffectedDate = null, ?User $user = null): LoanRecalculation
@@ -40,6 +42,10 @@ class LoanRecalculationService
 
             DB::transaction(function () use ($loan, $user) {
                 $this->rollForwardAssumedDisbursements($loan, $user);
+                // Vor der Plangenerierung: faellige Zinsen zuschreiben, damit
+                // die Folgeperioden das erhoehte Kapital verzinsen. Erzeugt bei
+                // ausgeschalteter Zinskapitalisierung keine Buchung.
+                $this->capitalization->process($loan, null, $user);
                 $this->schedule->generate($loan);
                 $this->schedule->rollForwardAssumed($loan);
                 $this->updateDefaultInterest($loan, $user);

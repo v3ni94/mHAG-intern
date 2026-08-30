@@ -168,6 +168,8 @@ class LoanController extends Controller
                 'interest_due_day' => ($data['interest_due_day_mode'] ?? null) === InterestDueDayMode::FixedDay->value
                     ? ($data['interest_due_day'] ?? null)
                     : null,
+                'interest_capitalization' => (bool) ($data['interest_capitalization'] ?? false),
+                'interest_capitalization_from' => $data['interest_capitalization_from'] ?? null,
                 'repayment_model' => $data['repayment_model'],
                 'default_interest_enabled' => (bool) ($data['default_interest_enabled'] ?? false),
                 'default_interest_rate' => $data['default_interest_rate'] ?? null,
@@ -384,6 +386,7 @@ class LoanController extends Controller
             'principal_amount', 'credit_limit', 'effective_from', 'due_date', 'contract_end',
             'term_months', 'interest_method', 'interest_frequency', 'repayment_model',
             'interest_due_day_mode', 'interest_due_day',
+            'interest_capitalization', 'interest_capitalization_from',
             'default_interest_enabled', 'default_interest_rate', 'default_interest_start',
             'default_interest_basis', 'default_interest_method', 'default_interest_mode',
             'disbursement_date',

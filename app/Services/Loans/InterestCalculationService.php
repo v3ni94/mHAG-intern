@@ -25,11 +25,17 @@ use Illuminate\Support\Carbon;
  */
 class InterestCalculationService
 {
-    /** Buchungsarten, die das offene Kapital veraendern. */
+    /**
+     * Buchungsarten, die das offene Kapital veraendern. Die Zinszuschreibung
+     * (Zinskapitalisierung) erhoeht das Kapital; dadurch verzinsen die
+     * Folgeperioden den erhoehten Betrag (Zinseszins), ohne dass die
+     * Zinsrechnung selbst etwas davon wissen muss.
+     */
     private const CAPITAL_TYPES = [
         BookingType::Disbursement,
         BookingType::Repayment,
         BookingType::WriteOff,
+        BookingType::InterestCapitalization,
     ];
 
     /**

@@ -32,6 +32,18 @@
                             ({{ $loan->interest_due_day }}. des Monats)
                         @endif
                     </dd>
+                    <dt class="col-5">
+                        Zinskapitalisierung
+                        <x-help-icon text="Fällige Zinsen werden nicht als Zahlung erwartet, sondern erhöhen das valutierte Kapital. Die Folgeperioden verzinsen den erhöhten Betrag." />
+                    </dt>
+                    <dd class="col-7">
+                        @if ($loan->interest_capitalization)
+                            aktiviert, Zuschreibung ab
+                            {{ format_date($loan->interest_capitalization_from ?? $loan->effective_from) }}
+                        @else
+                            nicht aktiviert
+                        @endif
+                    </dd>
                     <dt class="col-5">Tilgungsmodell</dt><dd class="col-7">{{ $loan->repayment_model?->label() }}</dd>
                     <dt class="col-5">Verzugszinsen</dt>
                     <dd class="col-7">

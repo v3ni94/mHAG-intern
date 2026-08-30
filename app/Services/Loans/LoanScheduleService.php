@@ -66,10 +66,19 @@ class LoanScheduleService
     // SOLL-Ziele
     // ------------------------------------------------------------------
 
-    /** @return array<int, array{0: RepaymentItemType, 1: string, 2: string}> */
-    protected function interestTargets(Loan $loan): array
+    /**
+     * Zinsperioden des Darlehens in zeitlicher Ordnung, lueckenlos und
+     * ueberschneidungsfrei. Die Periode endet am Faelligkeitstag
+     * einschliesslich; 'end_excl' ist der Folgetag, weil die Zinsrechnung mit
+     * halboffenen Intervallen [von, bis) arbeitet.
+     *
+     * Wird ausserdem von der Zinskapitalisierung genutzt, damit es nur eine
+     * Stelle gibt, die Perioden und Faelligkeiten festlegt.
+     *
+     * @return array<int, array{start: string, end_excl: string, due: string}>
+     */
+    public function interestPeriods(Loan $loan): array
     {
-        $targets = [];
         $months = $this->monthsPerPeriod($loan->interest_frequency);
         $start = Carbon::parse($loan->effective_from->toDateString());
 
@@ -78,15 +87,16 @@ class LoanScheduleService
                 $maturity = $loan->due_date ?? $loan->contract_end;
                 if ($maturity) {
                     $maturity = Carbon::parse($maturity->toDateString());
-                    // Faelligkeitstag zaehlt mit: Zeitraum [Beginn, Faelligkeit + 1 Tag)
-                    $amount = $this->interest->interestForLoanPeriod($loan, $start, $maturity->copy()->addDay());
-                    if (Money::isPositive($amount)) {
-                        $targets[] = [RepaymentItemType::Interest, $maturity->toDateString(), $amount];
-                    }
+
+                    return [[
+                        'start' => $start->toDateString(),
+                        'end_excl' => $maturity->copy()->addDay()->toDateString(),
+                        'due' => $maturity->toDateString(),
+                    ]];
                 }
             }
 
-            return $targets; // custom: keine automatischen Zinszeilen
+            return []; // custom: keine automatischen Zinszeilen
         }
 
         $hardEnd = $loan->contract_end ?? $loan->due_date;
@@ -95,9 +105,9 @@ class LoanScheduleService
             : today()->addMonthsNoOverflow(12);
         $limitExcl = $horizon->copy()->addDay();
 
-        // Die Periode endet am Faelligkeitstag einschliesslich, die naechste
-        // beginnt am Folgetag. Das Raster der Faelligkeiten richtet sich nach
-        // interest_due_day_mode; die Berechnung bleibt taggenau.
+        // Das Raster der Faelligkeiten richtet sich nach interest_due_day_mode;
+        // die Berechnung bleibt taggenau.
+        $periods = [];
         $pStart = $start->copy();
         foreach ($this->dueDateGrid($loan, $months, $start) as $gridDue) {
             if ($pStart->gte($limitExcl)) {
@@ -116,11 +126,31 @@ class LoanScheduleService
                 break; // rollierender Horizont: nur vollstaendige Perioden
             }
 
-            $amount = $this->interest->interestForLoanPeriod($loan, $pStart, $pEnd);
-            if (Money::isPositive($amount)) {
-                $targets[] = [RepaymentItemType::Interest, $due->toDateString(), $amount];
-            }
+            $periods[] = [
+                'start' => $pStart->toDateString(),
+                'end_excl' => $pEnd->toDateString(),
+                'due' => $due->toDateString(),
+            ];
             $pStart = $pEnd->copy();
+        }
+
+        return $periods;
+    }
+
+    /** @return array<int, array{0: RepaymentItemType, 1: string, 2: string}> */
+    protected function interestTargets(Loan $loan): array
+    {
+        $targets = [];
+
+        foreach ($this->interestPeriods($loan) as $period) {
+            $amount = $this->interest->interestForLoanPeriod(
+                $loan,
+                Carbon::parse($period['start']),
+                Carbon::parse($period['end_excl']),
+            );
+            if (Money::isPositive($amount)) {
+                $targets[] = [RepaymentItemType::Interest, $period['due'], $amount];
+            }
         }
 
         return $targets;

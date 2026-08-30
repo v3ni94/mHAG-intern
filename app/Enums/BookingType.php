@@ -11,6 +11,7 @@ enum BookingType: string
     case FeeCharge = 'fee_charge';
     case FeePayment = 'fee_payment';
     case DefaultInterest = 'default_interest';
+    case InterestCapitalization = 'interest_capitalization';
     case Cancellation = 'cancellation';
     case Correction = 'correction';
     case WriteOff = 'write_off';
@@ -26,6 +27,7 @@ enum BookingType: string
             self::FeeCharge => 'Gebühr',
             self::FeePayment => 'Gebührenzahlung',
             self::DefaultInterest => 'Verzugszins',
+            self::InterestCapitalization => 'Zinszuschreibung',
             self::Cancellation => 'Storno',
             self::Correction => 'Korrektur',
             self::WriteOff => 'Abschreibung',

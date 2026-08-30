@@ -44,6 +44,8 @@ class UpdateLoanRequest extends LoansFormRequest
             'interest_method' => ['required', Rule::enum(InterestMethod::class)],
             'interest_frequency' => ['required', Rule::enum(InterestFrequency::class)],
             'interest_due_day_mode' => ['nullable', Rule::enum(InterestDueDayMode::class)],
+            'interest_capitalization' => ['nullable', 'boolean'],
+            'interest_capitalization_from' => ['nullable', 'date'],
             'interest_due_day' => [
                 'nullable',
                 'integer',

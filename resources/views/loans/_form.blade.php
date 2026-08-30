@@ -192,6 +192,28 @@
                 @error('interest_due_day')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
             <div class="col-md-4">
+                <div class="form-check mt-4">
+                    <input type="hidden" name="interest_capitalization" value="0">
+                    <input type="checkbox" id="interest_capitalization" name="interest_capitalization" value="1"
+                           class="form-check-input" @checked(old('interest_capitalization', $loan->interest_capitalization))>
+                    <label class="form-check-label" for="interest_capitalization">
+                        Zinsen dem valutierten Betrag zuschreiben
+                        <x-help-icon text="Fällige Zinsen werden nicht als Zahlung erwartet, sondern erhöhen das valutierte Kapital. Die Folgeperioden verzinsen den erhöhten Betrag. Für die zugeschriebene Periode entsteht keine offene Zinsforderung." />
+                    </label>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="interest_capitalization_from">Zuschreibung ab (Wirkungsdatum)</label>
+                <input type="date" id="interest_capitalization_from" name="interest_capitalization_from"
+                       class="form-control @error('interest_capitalization_from') is-invalid @enderror"
+                       value="{{ old('interest_capitalization_from', $loan->interest_capitalization_from?->format('Y-m-d')) }}">
+                <div class="form-text">
+                    Ohne Angabe gilt der Wirkungsbeginn des Darlehens. Perioden mit früherer Fälligkeit
+                    bleiben unverändert.
+                </div>
+                @error('interest_capitalization_from')<div class="invalid-feedback">{{ $message }}</div>@enderror
+            </div>
+            <div class="col-md-4">
                 <label class="form-label" for="repayment_model">Tilgungsmodell *</label>
                 <select id="repayment_model" name="repayment_model" class="form-select @error('repayment_model') is-invalid @enderror" required>
                     @foreach (\App\Enums\RepaymentModel::cases() as $model)

@@ -81,6 +81,8 @@ class StoreLoanRequest extends LoansFormRequest
             'interest_method' => ['required', Rule::enum(InterestMethod::class)],
             'interest_frequency' => ['required', Rule::enum(InterestFrequency::class)],
             'interest_due_day_mode' => ['nullable', Rule::enum(InterestDueDayMode::class)],
+            'interest_capitalization' => ['nullable', 'boolean'],
+            'interest_capitalization_from' => ['nullable', 'date'],
             'interest_due_day' => [
                 'nullable',
                 'integer',
@@ -173,6 +175,8 @@ class StoreLoanRequest extends LoansFormRequest
             'interest_method' => 'Zinsmethode',
             'interest_frequency' => 'Zinsfälligkeit',
             'interest_due_day_mode' => 'Fälligkeitstag der Zinsen',
+            'interest_capitalization' => 'Zinskapitalisierung',
+            'interest_capitalization_from' => 'Zuschreibung ab',
             'interest_due_day' => 'Fester Fälligkeitstag',
             'repayment_model' => 'Tilgungsmodell',
             'interest_rate' => 'Zinssatz',

@@ -10,6 +10,7 @@ enum RepaymentItemStatus: string
     case Partial = 'partial';
     case Missed = 'missed';
     case Late = 'late';
+    case Capitalized = 'capitalized';
     case Waived = 'waived';
     case Cancelled = 'cancelled';
 
@@ -22,6 +23,7 @@ enum RepaymentItemStatus: string
             self::Partial => 'Teilweise bezahlt',
             self::Missed => 'Nicht bezahlt',
             self::Late => 'Verspätet bezahlt',
+            self::Capitalized => 'Dem Kapital zugeschrieben',
             self::Waived => 'Erlassen',
             self::Cancelled => 'Storniert',
         };
@@ -36,6 +38,7 @@ enum RepaymentItemStatus: string
             self::Partial => 'warning',
             self::Missed => 'danger',
             self::Late => 'warning',
+            self::Capitalized => 'info',
             self::Waived => 'neutral',
             self::Cancelled => 'neutral',
         };

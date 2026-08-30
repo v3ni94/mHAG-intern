@@ -190,20 +190,93 @@ class User extends Authenticatable
         return $this->scopedEntityIds();
     }
 
+    /** Sitzungsschluessel des gewaehlten Ansichtskontexts. */
+    public const CONTEXT_SESSION_KEY = 'context_assignment_id';
+
+    /** Wert fuer die ungefilterte Gesamtansicht. */
+    public const CONTEXT_ALL = 'all';
+
+    /**
+     * Zuordnungen, die als Ansicht zur Auswahl stehen (Abschnitt 13).
+     * Im Ausschlussmodus sind die Zuordnungen Ausschluesse und taugen nicht
+     * als Ansicht.
+     *
+     * @return Collection<int, UserEntityAssignment>
+     */
+    public function availableContexts(): Collection
+    {
+        if ($this->usesEntityExclusion()) {
+            return collect();
+        }
+
+        // Die Bezeichnung der Ansicht braucht den Namen der Gesellschaft.
+        // Ohne dieses Nachladen entstuende je Zuordnung eine eigene Abfrage.
+        $this->loadMissing('entityAssignments.entity');
+
+        return $this->entityAssignments
+            ->filter(fn (UserEntityAssignment $a) => $a->entity_id !== null)
+            ->sortBy(fn (UserEntityAssignment $a) => $a->viewLabel())
+            ->values();
+    }
+
     /**
      * Aktiver Ansichtskontext (Kontextwechsel, Session-basiert).
+     *
+     * Ohne ausdrueckliche Wahl gilt die Zuordnung mit Standardkennzeichen,
+     * sonst die Gesamtansicht (null). Die Gesamtansicht ist bewusst der
+     * Rueckfall: eine stillschweigende Einschraenkung wuerde wie Datenverlust
+     * wirken.
      */
     public function currentContext(): ?UserEntityAssignment
     {
-        $id = session('context_assignment_id');
-        if ($id) {
-            $assignment = $this->entityAssignments->firstWhere('id', $id);
-            if ($assignment) {
-                return $assignment;
+        $gewaehlt = session(self::CONTEXT_SESSION_KEY);
+
+        if ($gewaehlt === self::CONTEXT_ALL) {
+            return null;
+        }
+
+        $verfuegbar = $this->availableContexts();
+
+        if ($gewaehlt !== null) {
+            $treffer = $verfuegbar->firstWhere('id', (int) $gewaehlt);
+            if ($treffer) {
+                return $treffer;
             }
         }
 
-        return $this->entityAssignments->firstWhere('is_default', true)
-            ?? $this->entityAssignments->first();
+        return $verfuegbar->firstWhere('is_default', true);
+    }
+
+    /**
+     * Gesellschaft, auf die die aktuelle Ansicht eingeschraenkt ist.
+     * null bedeutet Gesamtansicht, also keine Einschraenkung.
+     */
+    public function viewEntityId(): ?int
+    {
+        return $this->currentContext()?->entity_id;
+    }
+
+    /**
+     * Organmandate dieser Person aus den Organen der Gesellschaften
+     * (Vorstand, Geschaeftsfuehrung, Aufsichtsrat). Grundlage fuer den
+     * Vorschlag, welche Gesellschaften als Ansicht freigegeben werden
+     * koennen. Ein Mandat allein gewaehrt KEINEN Datenzugriff; die Freigabe
+     * erfolgt ausdruecklich durch die Administration.
+     *
+     * @return Collection<int, CorporateBodyMember>
+     */
+    public function organMandates(): Collection
+    {
+        if (! $this->entity_id) {
+            return collect();
+        }
+
+        return CorporateBodyMember::query()
+            ->with('body.company:id,display_name')
+            ->where('person_entity_id', $this->entity_id)
+            ->where('status', 'active')
+            ->get()
+            ->filter(fn (CorporateBodyMember $m) => $m->body?->company_entity_id !== null)
+            ->values();
     }
 }

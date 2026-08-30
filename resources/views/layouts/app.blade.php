@@ -186,29 +186,41 @@
             </form>
 
             <div class="ms-auto d-flex align-items-center gap-2">
+                {{-- Ansichtswechsel (Abschnitt 13): Gesellschaften, fuer die der
+                     Benutzer handelt. Die Ansicht ist ein Filter, keine
+                     Berechtigung. --}}
                 @php
-                    // Kontextwechsel nur im Einschlussmodus: im Ausschlussmodus
-                    // sind die Zuordnungen Ausschluesse und taugen nicht als
-                    // Ansicht (Anforderung 30.08.2026).
                     $kontextBenutzer = auth()->user();
-                    $contexts = ($kontextBenutzer && ! $kontextBenutzer->usesEntityExclusion())
-                        ? $kontextBenutzer->entityAssignments
-                        : collect();
+                    $contexts = $kontextBenutzer ? $kontextBenutzer->availableContexts() : collect();
+                    $aktiveAnsicht = $kontextBenutzer?->currentContext();
                 @endphp
-                @if ($contexts->count() > 1)
+                @if ($contexts->isNotEmpty())
                     <div class="dropdown">
-                        <button class="btn btn-outline-secondary btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+                        <button class="btn btn-sm dropdown-toggle {{ $aktiveAnsicht ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                data-bs-toggle="dropdown" title="Ansicht wechseln">
                             <i class="bi bi-arrow-left-right"></i>
-                            <span class="d-none d-md-inline">Ansicht: {{ auth()->user()->currentContext()?->label ?: auth()->user()->currentContext()?->entity?->display_name ?: 'Standard' }}</span>
+                            <span class="d-none d-md-inline">
+                                Ansicht: {{ $aktiveAnsicht?->viewLabel() ?: 'Gesamtansicht' }}
+                            </span>
                         </button>
-                        <ul class="dropdown-menu dropdown-menu-end">
+                        <ul class="dropdown-menu dropdown-menu-end" style="min-width: 260px;">
+                            <li>
+                                <form method="POST" action="{{ route('context.switch') }}">
+                                    @csrf
+                                    <input type="hidden" name="assignment_id" value="{{ \App\Models\User::CONTEXT_ALL }}">
+                                    <button class="dropdown-item {{ $aktiveAnsicht === null ? 'fw-bold' : '' }}">
+                                        <i class="bi bi-globe2 me-2"></i>Gesamtansicht
+                                    </button>
+                                </form>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
                             @foreach ($contexts as $assignment)
                                 <li>
                                     <form method="POST" action="{{ route('context.switch') }}">
                                         @csrf
                                         <input type="hidden" name="assignment_id" value="{{ $assignment->id }}">
-                                        <button class="dropdown-item {{ auth()->user()->currentContext()?->id === $assignment->id ? 'fw-bold' : '' }}">
-                                            {{ $assignment->label ?: $assignment->entity?->display_name }}
+                                        <button class="dropdown-item {{ $aktiveAnsicht?->id === $assignment->id ? 'fw-bold' : '' }}">
+                                            <i class="bi bi-building me-2"></i>{{ $assignment->viewLabel() }}
                                         </button>
                                     </form>
                                 </li>
@@ -310,6 +322,23 @@
 
         <main class="mhag-content">
             @include('partials.flash')
+
+            {{-- Ehrlicher Hinweis: eine eingeschraenkte Ansicht darf nicht wie
+                 Datenverlust wirken (Abschnitt 13). --}}
+            @if ($aktiveAnsicht ?? null)
+                <div class="alert alert-primary d-flex flex-wrap justify-content-between align-items-center gap-2 py-2">
+                    <div class="small">
+                        <i class="bi bi-funnel"></i>
+                        Ansicht eingeschränkt auf <strong>{{ $aktiveAnsicht->viewLabel() }}</strong>.
+                        Dashboard, Darlehen, Zahlungen, Fälligkeiten und Reports zeigen nur Vorgänge dieser Gesellschaft.
+                    </div>
+                    <form method="POST" action="{{ route('context.switch') }}">
+                        @csrf
+                        <input type="hidden" name="assignment_id" value="{{ \App\Models\User::CONTEXT_ALL }}">
+                        <button class="btn btn-sm btn-outline-secondary">Gesamtansicht</button>
+                    </form>
+                </div>
+            @endif
             @include('onboarding.banner')
             @yield('content')
         </main>

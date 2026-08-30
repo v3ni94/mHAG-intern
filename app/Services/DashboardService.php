@@ -44,7 +44,7 @@ class DashboardService
     {
         $today = today();
         $items = [];
-        $loanIds = Loan::visibleTo($user)->pluck('id');
+        $loanIds = Loan::visibleTo($user)->inCurrentView($user)->pluck('id');
 
         // Überfällige Zahlungen: nur tatsächlich erfasste Ausfälle/Teilzahlungen
         $overdueCount = RepaymentPlanItem::query()
@@ -67,7 +67,7 @@ class DashboardService
         }
 
         // Verträge enden innerhalb von 14 Tagen
-        $endingContracts = Loan::visibleTo($user)
+        $endingContracts = Loan::visibleTo($user)->inCurrentView($user)
             ->whereNotNull('contract_end')
             ->whereDate('contract_end', '>=', $today)
             ->whereDate('contract_end', '<=', $today->copy()->addDays(14))
@@ -142,7 +142,7 @@ class DashboardService
     public function loanKpis(User $user): array
     {
         $today = today();
-        $loans = Loan::visibleTo($user)
+        $loans = Loan::visibleTo($user)->inCurrentView($user)
             ->whereNotIn('status', [LoanStatus::Draft->value, LoanStatus::Archived->value])
             ->get();
         $loanIds = $loans->pluck('id');
@@ -203,7 +203,7 @@ class DashboardService
     public function charts(User $user): array
     {
         $today = today();
-        $loans = Loan::visibleTo($user)
+        $loans = Loan::visibleTo($user)->inCurrentView($user)
             ->whereNotIn('status', [LoanStatus::Draft->value, LoanStatus::Archived->value])
             ->with(['lender', 'borrower'])
             ->get();

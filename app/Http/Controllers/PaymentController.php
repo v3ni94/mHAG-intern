@@ -38,7 +38,7 @@ class PaymentController extends Controller
     private function paymentFor(User $user, int|string $id, array $with = []): Payment
     {
         return Payment::with($with)
-            ->whereHas('loan', fn ($q) => $q->visibleTo($user))
+            ->whereHas('loan', fn ($q) => $q->visibleTo($user)->inCurrentView($user))
             ->findOrFail($id);
     }
 
@@ -56,7 +56,7 @@ class PaymentController extends Controller
         ];
 
         $payments = Payment::with(['loan', 'payer', 'payee', 'payerBankAccount', 'payeeBankAccount'])
-            ->whereHas('loan', fn ($q) => $q->visibleTo($user))
+            ->whereHas('loan', fn ($q) => $q->visibleTo($user)->inCurrentView($user))
             ->when($filters['loan_id'], fn ($q, $id) => $q->where('loan_id', $id))
             ->when($filters['from'], fn ($q, $from) => $q->whereDate('payment_date', '>=', $from))
             ->when($filters['to'], fn ($q, $to) => $q->whereDate('payment_date', '<=', $to))
@@ -71,7 +71,9 @@ class PaymentController extends Controller
         return view('payments.index', [
             'payments' => $payments,
             'filters' => $filters,
-            'loans' => Loan::visibleTo($user)->orderBy('loan_number')->get(['id', 'loan_number', 'title']),
+            // Auswahlliste des Filters folgt der Ansicht (Abschnitt 13)
+            'loans' => Loan::visibleTo($user)->inCurrentView($user)
+                ->orderBy('loan_number')->get(['id', 'loan_number', 'title']),
             'origins' => PaymentOrigin::cases(),
             'canRecord' => $user->can('payments.record'),
             'canCancel' => $user->can('payments.cancel'),

@@ -101,7 +101,7 @@ class LoanController extends Controller
             : 'loan_number';
         $direction = $request->query('dir') === 'asc' ? 'asc' : 'desc';
 
-        $loans = Loan::visibleTo($user)
+        $loans = Loan::visibleTo($user)->inCurrentView($user)
             ->with(['lender', 'borrower', 'loanType'])
             ->when($filters['status'], fn ($q, $status) => $q->where('status', $status))
             ->when($filters['lender_entity_id'], fn ($q, $id) => $q->where('lender_entity_id', $id))

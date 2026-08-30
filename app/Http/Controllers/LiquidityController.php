@@ -31,7 +31,7 @@ class LiquidityController extends Controller
 
         // Erwartete Eingänge: offene SOLL-Positionen (geplant, teilweise, ausgefallen-offen)
         $items = RepaymentPlanItem::query()
-            ->whereHas('loan', fn ($q) => $q->visibleTo($user))
+            ->whereHas('loan', fn ($q) => $q->visibleTo($user)->inCurrentView($user))
             ->whereDate('due_date', '>=', $from->toDateString())
             ->whereDate('due_date', '<=', $to->toDateString())
             ->whereIn('status', [
@@ -44,7 +44,7 @@ class LiquidityController extends Controller
 
         // Geplante Auszahlungen (Mittelabflüsse)
         $disbursements = LoanDisbursement::query()
-            ->whereHas('loan', fn ($q) => $q->visibleTo($user))
+            ->whereHas('loan', fn ($q) => $q->visibleTo($user)->inCurrentView($user))
             ->where('status', DisbursementStatus::Planned->value)
             ->whereDate('planned_date', '>=', $from->toDateString())
             ->whereDate('planned_date', '<=', $to->toDateString())

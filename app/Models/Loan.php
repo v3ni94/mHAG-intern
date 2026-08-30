@@ -168,6 +168,26 @@ class Loan extends Model
         });
     }
 
+    /**
+     * Einschraenkung auf die gewaehlte Ansicht (Abschnitt 13).
+     *
+     * Wirkt ausschliesslich in Listen, Auswertungen und Reports, nicht beim
+     * direkten Aufruf eines Vorgangs: die Ansicht ist ein Filter, keine
+     * Berechtigung. Ohne gewaehlte Ansicht (Gesamtansicht) bleibt die Abfrage
+     * unveraendert.
+     */
+    public function scopeInCurrentView(Builder $query, User $user): Builder
+    {
+        $entityId = $user->viewEntityId();
+        if ($entityId === null) {
+            return $query;
+        }
+
+        return $query->where(function (Builder $q) use ($entityId) {
+            $q->where('lender_entity_id', $entityId)->orWhere('borrower_entity_id', $entityId);
+        });
+    }
+
     /** Statuswechsel immer hierüber, damit die Historie vollständig bleibt. */
     public function transitionStatus(\App\Enums\LoanStatus $to, ?User $by = null, ?string $note = null, ?\Carbon\Carbon $effectiveDate = null): void
     {

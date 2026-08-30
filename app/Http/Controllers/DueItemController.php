@@ -33,7 +33,7 @@ class DueItemController extends Controller
         ];
 
         $base = fn () => RepaymentPlanItem::with('loan')
-            ->whereHas('loan', fn ($q) => $q->visibleTo($user))
+            ->whereHas('loan', fn ($q) => $q->visibleTo($user)->inCurrentView($user))
             ->when($filters['item_type'], fn ($q, $type) => $q->where('item_type', $type))
             ->when($filters['loan_id'], fn ($q, $id) => $q->where('loan_id', $id));
 
@@ -76,7 +76,8 @@ class DueItemController extends Controller
             'filters' => $filters,
             'horizon' => $horizon,
             'itemTypes' => RepaymentItemType::cases(),
-            'loans' => Loan::visibleTo($user)->orderBy('loan_number')->get(['id', 'loan_number', 'title']),
+            'loans' => Loan::visibleTo($user)->inCurrentView($user)
+                ->orderBy('loan_number')->get(['id', 'loan_number', 'title']),
         ]);
     }
 }

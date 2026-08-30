@@ -104,10 +104,33 @@ class UserController extends Controller
     {
         $user->load(['roles:id,name', 'entityAssignments.entity:id,display_name']);
 
+        /*
+         * Organmandate der zugeordneten Person (Vorstand, Geschaeftsfuehrung,
+         * Aufsichtsrat). Sie dienen als Vorschlag, welche Gesellschaften als
+         * Ansicht freigegeben werden koennen. Ein Mandat allein gewaehrt
+         * KEINEN Datenzugriff; die Freigabe erfolgt ausdruecklich hier.
+         */
+        $bereitsZugeordnet = $user->entityAssignments->pluck('entity_id')->filter()->all();
+        $mandate = $user->organMandates()
+            ->map(fn ($mandat) => [
+                'entity_id' => $mandat->body->company_entity_id,
+                'company' => $mandat->body->company?->display_name,
+                'body' => $mandat->body->name,
+                'body_type' => $mandat->body->type,
+                'role' => $mandat->role,
+                'is_chair' => (bool) $mandat->is_chair,
+                'context' => \App\Enums\AssignmentContext::fromBodyType($mandat->body->type)->value,
+                'already' => in_array($mandat->body->company_entity_id, $bereitsZugeordnet, true),
+            ])
+            ->unique(fn ($m) => $m['entity_id'].'|'.$m['context'])
+            ->values();
+
         return view('admin.users.edit', [
             'user' => $user,
             'roles' => Role::query()->orderBy('name')->get(),
             'entities' => Entity::query()->orderBy('display_name')->get(['id', 'display_name']),
+            'mandate' => $mandate,
+            'contexts' => \App\Enums\AssignmentContext::cases(),
         ]);
     }
 

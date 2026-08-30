@@ -129,7 +129,7 @@ class ReportController extends Controller
             ? \Illuminate\Support\Carbon::parse((string) $request->query('as_of'))
             : today();
 
-        $loans = Loan::visibleTo($user)
+        $loans = Loan::visibleTo($user)->inCurrentView($user)
             ->with(['lender:id,display_name', 'borrower:id,display_name'])
             ->when($status, fn ($q) => $q->where('status', $status))
             ->orderBy('loan_number')
@@ -178,7 +178,7 @@ class ReportController extends Controller
         $status = $request->query('status');
         $search = trim((string) $request->query('search', ''));
 
-        $loans = Loan::visibleTo($user)
+        $loans = Loan::visibleTo($user)->inCurrentView($user)
             ->with(['lender:id,display_name', 'borrower:id,display_name'])
             ->when($status, fn ($q) => $q->where('status', $status))
             ->when($search !== '', fn ($q) => $q->where(fn ($sub) => $sub
@@ -219,7 +219,7 @@ class ReportController extends Controller
 
         $items = RepaymentPlanItem::query()
             ->with('loan:id,loan_number,title')
-            ->whereIn('loan_id', Loan::visibleTo($user)->pluck('id'))
+            ->whereIn('loan_id', Loan::visibleTo($user)->inCurrentView($user)->pluck('id'))
             ->whereDate('due_date', '<=', $until)
             ->whereIn('status', [
                 RepaymentItemStatus::Planned->value,
@@ -254,7 +254,7 @@ class ReportController extends Controller
         $from = Carbon::create($year)->startOfYear();
         $to = Carbon::create($year)->endOfYear();
 
-        $loans = Loan::visibleTo($user)->with(['lender:id,display_name', 'borrower:id,display_name'])->orderBy('loan_number')->get();
+        $loans = Loan::visibleTo($user)->inCurrentView($user)->with(['lender:id,display_name', 'borrower:id,display_name'])->orderBy('loan_number')->get();
         $items = RepaymentPlanItem::query()
             ->whereIn('loan_id', $loans->pluck('id'))
             ->where('item_type', RepaymentItemType::Interest->value)
@@ -313,7 +313,7 @@ class ReportController extends Controller
 
         $items = RepaymentPlanItem::query()
             ->with('loan:id,loan_number')
-            ->whereIn('loan_id', Loan::visibleTo($user)->pluck('id'))
+            ->whereIn('loan_id', Loan::visibleTo($user)->inCurrentView($user)->pluck('id'))
             ->whereBetween('due_date', [$from->toDateString(), $to->toDateString()])
             ->whereNotIn('status', [RepaymentItemStatus::Cancelled->value, RepaymentItemStatus::Waived->value])
             ->when($type, fn ($q) => $q->where('item_type', $type))
@@ -340,7 +340,7 @@ class ReportController extends Controller
     {
         $overdueItems = RepaymentPlanItem::query()
             ->with('loan.lender:id,display_name', 'loan.borrower:id,display_name')
-            ->whereIn('loan_id', Loan::visibleTo($user)->pluck('id'))
+            ->whereIn('loan_id', Loan::visibleTo($user)->inCurrentView($user)->pluck('id'))
             ->whereDate('due_date', '<', today())
             ->whereIn('status', [RepaymentItemStatus::Missed->value, RepaymentItemStatus::Partial->value])
             ->get()
@@ -379,7 +379,7 @@ class ReportController extends Controller
     private function securities(Request $request, User $user): array
     {
         $status = $request->query('status');
-        $loanIds = Loan::visibleTo($user)->pluck('id');
+        $loanIds = Loan::visibleTo($user)->inCurrentView($user)->pluck('id');
 
         $rows = [];
         Security::query()->with(['loan:id,loan_number', 'provider:id,display_name'])
@@ -429,7 +429,7 @@ class ReportController extends Controller
     {
         $relation = $side === 'lender' ? 'lender' : 'borrower';
 
-        $loans = Loan::visibleTo($user)->with([$relation.':id,display_name'])->get();
+        $loans = Loan::visibleTo($user)->inCurrentView($user)->with([$relation.':id,display_name'])->get();
 
         $rows = $loans->groupBy(fn (Loan $l) => $l->{$relation}?->display_name ?? 'Unbekannt')
             ->map(function (Collection $group, string $name) {

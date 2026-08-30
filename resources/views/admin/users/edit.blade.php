@@ -109,10 +109,24 @@
                     @endif
                     Leere Zeilen werden ignoriert; entfernte Zeilen werden gelöscht.
                 </p>
+                <p class="text-muted small">
+                    Jede Zuordnung erscheint zusätzlich im Ansichtswechsel oben rechts. Damit kann der Benutzer
+                    zwischen den Gesellschaften umschalten, für die er handelt. Die Ansicht schränkt Dashboard,
+                    Darlehen, Zahlungen, Fälligkeiten und Reports auf diese Gesellschaft ein; sie erweitert die
+                    Berechtigung nicht.
+                </p>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle" id="assignments-table">
                         <thead>
-                            <tr><th>Entität</th><th>Kontext</th><th>Bezeichnung</th><th>Standard</th></tr>
+                            <tr>
+                                <th>Entität</th>
+                                <th>In welcher Eigenschaft</th>
+                                <th>Bezeichnung im Ansichtswechsel</th>
+                                <th class="text-center">
+                                    Startansicht
+                                    <x-help-icon text="Diese Ansicht ist nach der Anmeldung aktiv. Ohne Kennzeichen startet der Benutzer in der Gesamtansicht und kann oben rechts wechseln." />
+                                </th>
+                            </tr>
                         </thead>
                         <tbody>
                             @php($assignments = old('assignments', $user->entityAssignments->map(fn ($a) => ['entity_id' => $a->entity_id, 'context' => $a->context, 'label' => $a->label, 'is_default' => $a->is_default])->all()))
@@ -127,10 +141,12 @@
                                         </select>
                                     </td>
                                     <td>
+                                        @php($aktuellerKontext = $assignment['context'] ?? 'self')
+                                        @php($aktuellerKontext = $aktuellerKontext instanceof \App\Enums\AssignmentContext ? $aktuellerKontext->value : (string) $aktuellerKontext)
                                         <select name="assignments[{{ $i }}][context]" class="form-select form-select-sm">
-                                            <option value="self" @selected(($assignment['context'] ?? 'self') === 'self')>Selbst</option>
-                                            <option value="company" @selected(($assignment['context'] ?? '') === 'company')>Unternehmen</option>
-                                            <option value="supervisory_board" @selected(($assignment['context'] ?? '') === 'supervisory_board')>Aufsichtsrat</option>
+                                            @foreach ($contexts as $kontext)
+                                                <option value="{{ $kontext->value }}" @selected($aktuellerKontext === $kontext->value)>{{ $kontext->label() }}</option>
+                                            @endforeach
                                         </select>
                                     </td>
                                     <td><input type="text" name="assignments[{{ $i }}][label]" value="{{ $assignment['label'] ?? '' }}" class="form-control form-control-sm" placeholder="z. B. Als Darlehensgeber"></td>
@@ -143,6 +159,47 @@
                         </tbody>
                     </table>
                 </div>
+
+                {{-- Organmandate als Vorschlag (Abschnitt 13). Ein Mandat allein
+                     gewährt keinen Datenzugriff; die Freigabe erfolgt oben. --}}
+                @if ($mandate->isNotEmpty())
+                    <hr>
+                    <h6 class="mb-2">Organmandate dieser Person</h6>
+                    <p class="text-muted small">
+                        Aus den erfassten Organen der Gesellschaften. Ein Mandat allein gewährt keinen Zugriff.
+                        Soll die Gesellschaft als Ansicht zur Verfügung stehen, ist sie oben als Zuordnung
+                        einzutragen, in der Eigenschaft "{{ \App\Enums\AssignmentContext::Company->label() }}"
+                        beziehungsweise "{{ \App\Enums\AssignmentContext::SupervisoryBoard->label() }}".
+                    </p>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr><th>Gesellschaft</th><th>Organ</th><th>Funktion</th><th>Ansicht freigegeben</th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($mandate as $mandat)
+                                    <tr>
+                                        <td>{{ $mandat['company'] ?: '(ohne Namen)' }}</td>
+                                        <td class="small">{{ $mandat['body'] }}</td>
+                                        <td class="small">
+                                            {{ $mandat['role'] ?: 'Mitglied' }}
+                                            @if ($mandat['is_chair'])
+                                                <span class="badge text-bg-light">Vorsitz</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if ($mandat['already'])
+                                                <x-status-badge severity="success" label="freigegeben" icon="bi-check-circle-fill" />
+                                            @else
+                                                <x-status-badge severity="neutral" label="nicht freigegeben" icon="bi-dash-circle" />
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
             </div>
         </div>
 

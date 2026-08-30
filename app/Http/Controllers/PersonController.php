@@ -231,7 +231,11 @@ class PersonController extends Controller
             case 'rollen':
             case 'unternehmen':
                 $entity->load(['organizationRolesAsPerson' => fn ($q) => $q->with('company')->orderByDesc('is_active')->orderBy('started_on')]);
+                // Auswahlliste nach Sichtbarkeit: ohne visibleTo enthielt sie
+                // auch ausgeschlossene Gesellschaften und legte damit deren
+                // Namen offen.
                 $data['companyOptions'] = Entity::query()
+                    ->visibleTo($request->user())
                     ->whereIn('type', [EntityType::Company, EntityType::Organization])
                     ->where('status', 'active')
                     ->orderBy('display_name')

@@ -208,10 +208,9 @@ class ContractController extends Controller
     /** Externe sehen nur Verträge zu Darlehen ihrer zugeordneten Entities. */
     private function scopedQuery(User $user): Builder
     {
-        return Contract::query()->when(
-            ! $user->isInternal(),
-            fn (Builder $q) => $q->whereHas('loan', fn (Builder $lq) => $lq->visibleTo($user)),
-        );
+        // Die Regel steht im Modell (Contract::scopeVisibleTo), damit alle
+        // Aufrufer dieselbe verwenden.
+        return Contract::query()->visibleTo($user);
     }
 
     /** Fehlende Platzhalter für die Finalisierung ermitteln. */

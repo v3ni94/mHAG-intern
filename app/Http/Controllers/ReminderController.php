@@ -36,19 +36,42 @@ class ReminderController extends Controller
 
         return view('reminders.index', [
             'reminders' => $reminders,
-            'users' => User::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'users' => $this->zuweisbareBenutzer($request->user()),
         ]);
     }
 
     public function create(Request $request): View
     {
         return view('reminders.create', [
-            'users' => User::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'users' => $this->zuweisbareBenutzer($request->user()),
             'preset' => [
                 'remindable_type' => $request->query('remindable_type'),
                 'remindable_id' => $request->query('remindable_id'),
             ],
         ]);
+    }
+
+    /**
+     * Benutzer, denen eine Wiedervorlage zugewiesen werden darf.
+     *
+     * Zuvor stand hier das vollständige Benutzerverzeichnis, für jede
+     * angemeldete Rolle und ohne Berechtigungsprüfung; die Wiedervorlagen
+     * liegen hinter keiner eigenen Berechtigung. Eine externe Rolle konnte so
+     * die Namen aller Benutzer der Gruppe auslesen. Sie weist nur sich selbst
+     * zu, mehr ist für den Zweck nicht erforderlich.
+     */
+    private function zuweisbareBenutzer(?User $user): \Illuminate\Support\Collection
+    {
+        if ($user === null) {
+            return collect();
+        }
+
+        if (! $user->isInternal()) {
+            return collect([$user->only(['id', 'name'])])
+                ->map(fn (array $eintrag) => (object) $eintrag);
+        }
+
+        return User::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']);
     }
 
     public function store(ReminderRequest $request): RedirectResponse
@@ -66,13 +89,13 @@ class ReminderController extends Controller
         return redirect()->route('reminders.index')->with('success', 'Die Wiedervorlage wurde angelegt.');
     }
 
-    public function edit(Reminder $reminder): View
+    public function edit(Request $request, Reminder $reminder): View
     {
         $this->authorizeAccess($reminder);
 
         return view('reminders.edit', [
             'reminder' => $reminder,
-            'users' => User::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'users' => $this->zuweisbareBenutzer($request->user()),
         ]);
     }
 

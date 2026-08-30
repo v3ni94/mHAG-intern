@@ -363,4 +363,133 @@ class PartnerScopeTest extends TestCase
 
         $response->assertSessionHasErrors('entity_scope_mode');
     }
+
+    // -----------------------------------------------------------------
+    // Datenscope-Audit vom 30.08.2026: Stellen, an denen der Ausschluss
+    // umgangen werden konnte. Alle vier hier gepruefften Wege waren fuer die
+    // Rolle Partner tatsaechlich erreichbar; gemessen, nicht angenommen.
+    // -----------------------------------------------------------------
+
+    public function test_holding_und_beschluesse_bleiben_fuer_partner_gesperrt(): void
+    {
+        // Gegenprobe zur Einordnung der uebrigen Auditbefunde: Der grosse Teil
+        // des Holding-Bereichs ist fuer Partner ueber die Berechtigung
+        // gesperrt, nicht erst ueber den Datenscope.
+        $partner = $this->partner([$this->holding]);
+
+        foreach ([
+            '/aktionaere', '/aktienbewegungen', '/beteiligungen', '/beschluesse',
+            '/organe', '/signaturen', '/holding',
+            '/reports/aktionaersliste', '/reports/aktienbewegungen',
+            '/reports/beteiligungen', '/reports/beschlussregister',
+        ] as $pfad) {
+            $this->actingAs($partner)->get($pfad)->assertForbidden();
+        }
+    }
+
+    public function test_partner_kann_keinen_nachtrag_zu_einem_fremden_vertrag_erfassen(): void
+    {
+        /*
+         * Schreibender Weg: Der Nachtrag wurde ohne jede
+         * Sichtbarkeitspruefung geschrieben, waehrend alle Aktionen des
+         * ContractController sie durchlaufen. Partner besitzt
+         * contracts.update, konnte also Laufzeit, Zinssatz, Tilgung oder
+         * Stundung an Vertraegen ausgeschlossener Gesellschaften erfassen.
+         */
+        $partner = $this->partner([$this->holding]);
+        $darlehen = $this->makeLoan($this->holding, $this->fremdA, 'DAR-2026-09701');
+        $vertrag = \App\Models\Contract::create([
+            'contract_number' => 'VTR-2026-0001',
+            'loan_id' => $darlehen->id,
+            'title' => 'Darlehensvertrag Müller Holding',
+            'status' => 'draft',
+        ]);
+
+        $this->actingAs($partner)
+            ->post(route('contracts.amendments.store', $vertrag), [
+                'amendment_type' => 'deferral',
+                'description' => 'Stundung bis Jahresende',
+                'effective_date' => '2026-09-01',
+            ])
+            ->assertNotFound();
+
+        $this->assertSame(0, $vertrag->amendments()->count(),
+            'Es darf kein Nachtrag entstehen.');
+    }
+
+    public function test_partner_kann_ueber_eine_wiedervorlage_keinen_fremden_vorgang_auslesen(): void
+    {
+        /*
+         * Die Wiedervorlagenliste zeigt zum Bezug die Darlehensnummer oder den
+         * Titel des verknuepften Objekts. Da remindable_id nur als Zahl
+         * geprueft wurde, liess sich damit der Datenscope umgehen und sogar
+         * die 403-Sperre des Holding-Bereichs.
+         */
+        $partner = $this->partner([$this->holding]);
+        $fremdesDarlehen = $this->makeLoan($this->holding, $this->fremdA, 'DAR-2026-09702');
+
+        $this->actingAs($partner)
+            ->post(route('reminders.store'), [
+                'title' => 'Nachfragen',
+                'due_date' => '2026-09-30',
+                'assigned_to' => $partner->id,
+                'priority' => 'normal',
+                'remindable_type' => 'loan',
+                'remindable_id' => $fremdesDarlehen->id,
+            ])
+            ->assertSessionHasErrors('remindable_id');
+
+        $this->assertDatabaseCount('reminders', 0);
+    }
+
+    public function test_partner_kann_eine_wiedervorlage_zum_eigenen_vorgang_anlegen(): void
+    {
+        // Gegenprobe: der zulaessige Fall muss weiter funktionieren.
+        $partner = $this->partner([$this->holding]);
+        $eigenes = $this->makeLoan($this->fremdA, $this->fremdB, 'DAR-2026-09703');
+
+        $this->actingAs($partner)
+            ->post(route('reminders.store'), [
+                'title' => 'Nachfragen',
+                'due_date' => '2026-09-30',
+                'assigned_to' => $partner->id,
+                'priority' => 'normal',
+                'remindable_type' => 'loan',
+                'remindable_id' => $eigenes->id,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseCount('reminders', 1);
+    }
+
+    public function test_partner_sieht_nicht_das_benutzerverzeichnis_der_gruppe(): void
+    {
+        $partner = $this->partner([$this->holding]);
+        $intern = User::factory()->create(['is_active' => true, 'name' => 'Interner Sachbearbeiter']);
+        $intern->assignRole('Sachbearbeiter');
+
+        $this->actingAs($partner)->get(route('reminders.index'))
+            ->assertOk()
+            ->assertDontSee('Interner Sachbearbeiter');
+
+        $this->actingAs($partner)->get(route('reminders.create'))
+            ->assertOk()
+            ->assertDontSee('Interner Sachbearbeiter');
+    }
+
+    public function test_partner_kann_eine_wiedervorlage_nicht_einem_anderen_zuweisen(): void
+    {
+        $partner = $this->partner([$this->holding]);
+        $intern = User::factory()->create(['is_active' => true, 'name' => 'Interner Sachbearbeiter']);
+        $intern->assignRole('Sachbearbeiter');
+
+        $this->actingAs($partner)
+            ->post(route('reminders.store'), [
+                'title' => 'Bitte pruefen',
+                'due_date' => '2026-09-30',
+                'assigned_to' => $intern->id,
+                'priority' => 'normal',
+            ])
+            ->assertSessionHasErrors('assigned_to');
+    }
 }

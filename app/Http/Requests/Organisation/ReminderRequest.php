@@ -10,6 +10,7 @@ use App\Models\Resolution;
 use App\Models\ShareTransaction;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 /**
  * Wiedervorlagen (Abschnitt 73 Masterprompt): Titel, Beschreibung, Datum,
@@ -44,6 +45,71 @@ class ReminderRequest extends FormRequest
             'remindable_type' => ['nullable', Rule::in(array_keys(self::REMINDABLE_TYPES))],
             'remindable_id' => ['nullable', 'required_with:remindable_type', 'integer', 'min:1'],
         ];
+    }
+
+    /**
+     * Bezug und Zuweisung gegen die Sichtbarkeit prüfen.
+     *
+     * Zuvor war "remindable_id" nur als Zahl geprüft. Die Wiedervorlagenliste
+     * zeigt zum Bezug aber Bezeichnung, Darlehensnummer oder Titel des
+     * verknüpften Objekts an (resources/views/reminders/index.blade.php).
+     * Damit ließ sich der Datenscope umgehen: Eine externe Rolle konnte eine
+     * Wiedervorlage auf ein beliebiges Darlehen, einen Vertrag, einen
+     * Beschluss oder eine Aktienbewegung setzen und dessen Bezeichnung
+     * auslesen, auch bei ausgeschlossenen Gesellschaften und auch bei
+     * Vorgängen, deren eigene Seite mit 403 gesperrt ist.
+     *
+     * Ebenso die Zuweisung: Eine externe Rolle weist nur sich selbst zu. Das
+     * vollständige Benutzerverzeichnis ist für sie weder nötig noch zulässig.
+     */
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $v) {
+            $benutzer = $this->user();
+            if ($benutzer === null) {
+                return;
+            }
+
+            if (! $benutzer->isInternal() && (int) $this->input('assigned_to') !== (int) $benutzer->id) {
+                $v->errors()->add('assigned_to',
+                    'Eine Wiedervorlage kann nur dem eigenen Konto zugewiesen werden.');
+            }
+
+            $typ = (string) $this->input('remindable_type');
+            $id = (int) $this->input('remindable_id');
+            if ($typ === '' || $id <= 0 || ! array_key_exists($typ, self::REMINDABLE_TYPES)) {
+                return;
+            }
+
+            if (! $this->bezugIstSichtbar($typ, $id)) {
+                $v->errors()->add('remindable_id',
+                    'Der gewählte Bezug ist nicht verfügbar. Bitte einen Vorgang wählen, auf den '
+                    .'Sie Zugriff haben.');
+            }
+        });
+    }
+
+    /** Darf der Benutzer den angegebenen Vorgang sehen? */
+    private function bezugIstSichtbar(string $typ, int $id): bool
+    {
+        $benutzer = $this->user();
+
+        return match ($typ) {
+            'entity' => Entity::query()->visibleTo($benutzer)->whereKey($id)->exists(),
+            'loan' => Loan::query()->visibleTo($benutzer)->whereKey($id)->exists(),
+            'contract' => Contract::query()->visibleTo($benutzer)->whereKey($id)->exists(),
+            // Für die Holding-Vorgänge gibt es noch keinen Entity-Scope. Bis
+            // dahin gilt die Berechtigung als Schranke: ohne sie ist der
+            // Vorgang auf seiner eigenen Seite mit 403 gesperrt, und dann darf
+            // er auch hier nicht als Bezug dienen.
+            'resolution' => (bool) $benutzer?->can('resolutions.view')
+                && Resolution::query()->whereKey($id)->exists(),
+            'share_transaction' => (bool) $benutzer?->can('shares.view')
+                && ShareTransaction::query()->whereKey($id)->exists(),
+            'investment' => (bool) $benutzer?->can('shares.view')
+                && Investment::query()->whereKey($id)->exists(),
+            default => false,
+        };
     }
 
     public function attributes(): array

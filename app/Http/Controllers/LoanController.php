@@ -156,7 +156,12 @@ class LoanController extends Controller
             ]),
             'entities' => Entity::visibleTo($user)->orderBy('display_name')->get(['id', 'display_name']),
             'loanTypes' => LoanType::where('is_active', true)->orderBy('name')->get(),
-            'handlers' => User::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            // Sachbearbeiter nur fuer interne Rollen zur Auswahl: eine externe
+            // Rolle braucht das Benutzerverzeichnis der Gruppe nicht und darf
+            // es nicht sehen.
+            'handlers' => $user->isInternal()
+                ? User::where('is_active', true)->orderBy('name')->get(['id', 'name'])
+                : collect(),
             'isInternal' => $user->isInternal(),
         ]);
     }

@@ -15,6 +15,19 @@ class ContractAmendmentController extends Controller
 {
     public function store(StoreContractAmendmentRequest $request, Contract $contract)
     {
+        /*
+         * Sichtbarkeitspruefung. Sie fehlte hier vollstaendig, waehrend alle
+         * Aktionen des ContractController sie durchlaufen. Eine externe Rolle
+         * mit contracts.update, etwa Partner, konnte damit Nachtraege zu
+         * Laufzeit, Zinssatz, Tilgung oder Stundung an Vertraegen
+         * ausgeschlossener Gesellschaften erfassen. Der Schreibvorgang blieb
+         * wirksam, obwohl die anschliessende Weiterleitung 404 ergab.
+         */
+        $contract = Contract::query()
+            ->visibleTo($request->user())
+            ->whereKey($contract->getKey())
+            ->firstOrFail();
+
         $amendment = $contract->amendments()->create([
             'amendment_type' => $request->input('amendment_type'),
             'description' => $request->input('description'),

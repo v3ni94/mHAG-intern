@@ -4,7 +4,10 @@
     <x-page-header title="Mein Profil" label="Konto" />
     <div class="row g-3">
         <div class="col-lg-6">
-            {{-- Profilbild (Anforderung 30.08.2026) --}}
+            {{-- Profilbild (Anforderung 30.08.2026). Die Routenpruefung faengt den
+                 Zustand direkt nach einem Datei-Upload ab, wenn das
+                 Routenverzeichnis noch zwischengespeichert ist. --}}
+            @if (\Illuminate\Support\Facades\Route::has('profile.avatar.store'))
             <div class="card mb-3" id="profilbild">
                 <div class="card-header">Profilbild</div>
                 <div class="card-body">
@@ -38,6 +41,7 @@
                     </div>
                 </div>
             </div>
+            @endif
             <div class="card mb-3">
                 <div class="card-header">Stammdaten</div>
                 <div class="card-body">

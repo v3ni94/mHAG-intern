@@ -6,7 +6,17 @@
 --}}
 @php
     $px = (int) $size;
-    $hasAvatar = $user && method_exists($user, 'hasAvatar') && $user->hasAvatar();
+    /*
+     * Die Route wird ausdruecklich geprueft: nach einem Datei-Upload kann das
+     * Routenverzeichnis noch zwischengespeichert sein und den neuen Namen
+     * nicht kennen. Dann erscheint das Firmenzeichen, statt dass jede Seite
+     * abbricht.
+     */
+    $avatarRouteVorhanden = \Illuminate\Support\Facades\Route::has('profile.avatar.show');
+    $hasAvatar = $avatarRouteVorhanden
+        && $user
+        && method_exists($user, 'hasAvatar')
+        && $user->hasAvatar();
 @endphp
 @if ($hasAvatar)
     <img src="{{ route('profile.avatar.show', $user->id) }}"

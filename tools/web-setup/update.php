@@ -64,37 +64,42 @@ $messages = [];
 /**
  * Prüft die Konfigurationsdatei auf Syntaxfehler, BEVOR die Anwendung geladen
  * wird: Ein ungültiger Wert führt sonst zum sofortigen Abbruch mit einem
- * nackten Serverfehler 500 ohne jede Meldung.
+ * nackten Serverfehler 500 ohne jede Meldung und ohne Protokolleintrag.
+ *
+ * Die Regeln liegen in app/Support/EnvFileInspector.php, damit sie durch
+ * automatisierte Tests gegen den tatsächlich verwendeten Parser geprüft
+ * werden können. Die Klasse wird hier absichtlich per require_once geladen,
+ * nicht über den Autoloader: die Prüfung muss auch ohne startfähiges
+ * Framework arbeiten.
+ *
+ * @return array{fehler: array<int, string>, warnungen: array<int, string>}
  */
-function envProbleme($path)
+function envBefunde($basePath, $path)
 {
-    $probleme = [];
-    if (! is_readable($path)) {
-        return $probleme;
+    $inspektor = $basePath.'/app/Support/EnvFileInspector.php';
+    if (! is_readable($inspektor)) {
+        return [
+            'fehler' => [],
+            'warnungen' => ['Die Prüfroutine app/Support/EnvFileInspector.php fehlt. '
+                .'Die Konfigurationsdatei konnte nicht zeilenweise geprüft werden.'],
+        ];
     }
-    $nummer = 0;
-    foreach (file($path, FILE_IGNORE_NEW_LINES) as $zeile) {
-        $nummer++;
-        $roh = trim($zeile);
-        if ($roh === '' || strpos($roh, '#') === 0 || strpos($roh, '=') === false) {
-            continue;
-        }
-        [$schluessel, $wert] = array_map('trim', explode('=', $roh, 2));
 
-        if (strpos($wert, '<') !== false || strpos($wert, '>') !== false) {
-            $probleme[] = 'Zeile '.$nummer.' ('.$schluessel.'): Der Platzhalter in spitzen Klammern wurde nicht ersetzt.';
+    require_once $inspektor;
 
-            continue;
-        }
-        $inAnfuehrungszeichen = strlen($wert) >= 2
-            && ((substr($wert, 0, 1) === '"' && substr($wert, -1) === '"')
-                || (substr($wert, 0, 1) === "'" && substr($wert, -1) === "'"));
-        if (! $inAnfuehrungszeichen && $wert !== '' && preg_match('/\s/', $wert)) {
-            $probleme[] = 'Zeile '.$nummer.' ('.$schluessel.'): Der Wert enthält Leerzeichen und muss in Anführungszeichen stehen.';
+    $fehler = [];
+    $warnungen = [];
+    foreach (App\Support\EnvFileInspector::inspectFile($path) as $befund) {
+        $text = ($befund['line'] > 0 ? 'Zeile '.$befund['line'] : 'Datei')
+            .($befund['key'] !== '' ? ' ('.$befund['key'].')' : '').': '.$befund['message'];
+        if ($befund['severity'] === App\Support\EnvFileInspector::FEHLER) {
+            $fehler[] = $text;
+        } else {
+            $warnungen[] = $text;
         }
     }
 
-    return $probleme;
+    return ['fehler' => $fehler, 'warnungen' => $warnungen];
 }
 
 // ---------------------------------------------------------------------------
@@ -116,7 +121,9 @@ if ($action === 'delete') {
 // ---------------------------------------------------------------------------
 // Anwendung laden
 // ---------------------------------------------------------------------------
-$envFehler = file_exists($envPath) ? envProbleme($envPath) : ['Die Datei .env wurde nicht gefunden.'];
+$befunde = envBefunde($basePath, $envPath);
+$envFehler = $befunde['fehler'];
+$envWarnungen = $befunde['warnungen'];
 
 $app = null;
 $laravelError = null;
@@ -143,6 +150,29 @@ if ($envFehler === [] && file_exists($basePath.'/vendor/autoload.php')) {
         $laravelError = $e->getMessage();
         $app = null;
     }
+}
+
+/**
+ * Entfernt die zwischengespeicherten Dateien auf Dateiebene. Bewusst mit
+ * unlink und nicht über artisan: die Bereinigung muss auch dann greifen,
+ * wenn das Framework nach einer misslungenen Zwischenspeicherung nicht mehr
+ * startet.
+ */
+function zwischenspeicherEntfernen($basePath)
+{
+    $entfernt = 0;
+    foreach (['/bootstrap/cache/config.php', '/bootstrap/cache/events.php'] as $relativ) {
+        if (file_exists($basePath.$relativ) && @unlink($basePath.$relativ)) {
+            $entfernt++;
+        }
+    }
+    foreach (glob($basePath.'/bootstrap/cache/routes*.php') ?: [] as $pfad) {
+        if (@unlink($pfad)) {
+            $entfernt++;
+        }
+    }
+
+    return $entfernt;
 }
 
 // ---------------------------------------------------------------------------
@@ -199,13 +229,30 @@ if ($action === 'roles' && $app !== null) {
 }
 
 if ($action === 'optimize' && $app !== null) {
+    @set_time_limit(300);
+    /*
+     * Ruecknahme im Fehlerfall: Bricht einer der Schritte ab, bleibt sonst
+     * eine halb geschriebene Zwischenspeicherung liegen, und die Anwendung
+     * antwortet auf JEDER Seite mit einem Serverfehler 500. Deshalb werden
+     * die erzeugten Dateien dann wieder entfernt. Ohne Zwischenspeicher ist
+     * die Anwendung langsamer, aber erreichbar. Erreichbarkeit geht vor.
+     */
+    $erzeugt = [];
     try {
         foreach (['config:cache', 'route:cache', 'view:cache'] as $command) {
             Illuminate\Support\Facades\Artisan::call($command);
+            $erzeugt[] = $command;
         }
         $messages[] = ['ok', 'Die Anwendung wurde wieder für den Produktivbetrieb optimiert.'];
     } catch (Throwable $e) {
-        $messages[] = ['error', 'Die Optimierung ist fehlgeschlagen: '.$e->getMessage()];
+        $entfernt = zwischenspeicherEntfernen($basePath);
+        $messages[] = ['error', 'Die Optimierung ist fehlgeschlagen und wurde zurückgenommen: '
+            .$e->getMessage()];
+        $messages[] = ['warnung', 'Erfolgreich waren: '
+            .($erzeugt === [] ? 'kein Schritt' : implode(', ', $erzeugt)).'. '
+            .'Es wurden '.$entfernt.' zwischengespeicherte Datei(en) wieder entfernt, damit die '
+            .'Anwendung erreichbar bleibt. Bitte die genannte Ursache beheben und den Schritt '
+            .'erneut ausführen.'];
     }
 }
 
@@ -286,8 +333,24 @@ $tokenEscaped = htmlspecialchars($token, ENT_QUOTES);
 
     <?php if ($envFehler !== []) { ?>
         <div class="fehler">
-            <strong>Die Konfigurationsdatei .env ist fehlerhaft.</strong> Die Anwendung kann so nicht starten.
+            <strong>Die Konfigurationsdatei .env ist fehlerhaft. Der Zwischenspeicher darf jetzt
+            nicht geleert werden.</strong>
+            <p style="margin:8px 0 0;">Die .env wird gelesen, bevor die Anwendung eine
+            Fehlerbehandlung besitzt. Solange die Datei bootstrap/cache/config.php vorhanden ist,
+            wird die .env überhaupt nicht gelesen und der Fehler bleibt verdeckt. In dem Moment,
+            in dem der Zwischenspeicher geleert wird, antwortet jede Seite mit einem Serverfehler
+            500. Deshalb sind alle Schritte gesperrt, bis die genannten Zeilen berichtigt sind.</p>
             <ul><?php foreach ($envFehler as $f) { ?><li><?= htmlspecialchars($f) ?></li><?php } ?></ul>
+            <p style="margin:8px 0 0;">Zum Berichtigen die Datei .env im Dateimanager öffnen und
+            die genannten Zeilen entweder löschen oder mit einem vorangestellten # als Kommentar
+            kennzeichnen. Danach diese Seite neu laden.</p>
+        </div>
+    <?php } ?>
+
+    <?php if ($envWarnungen !== []) { ?>
+        <div class="hinweis">
+            <strong>Hinweise zur Konfigurationsdatei .env</strong> (kein Hindernis für den Start):
+            <ul><?php foreach ($envWarnungen as $w) { ?><li><?= htmlspecialchars($w) ?></li><?php } ?></ul>
         </div>
     <?php } ?>
 

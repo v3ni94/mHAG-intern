@@ -50,3 +50,62 @@ Sie sie über den Dateimanager.
   Einrichtungswerkzeug, kein Bestandteil des Betriebs.
 - Mit SSH-Zugang ist der reguläre Weg vorzuziehen:
   `php artisan key:generate` und `php artisan migrate --seed --force`.
+
+## `update.php` – Aktualisierungen ohne Kommandozeile
+
+Für nachträgliche Datei-Uploads. Führt in dieser Reihenfolge aus:
+Zwischenspeicher leeren, Datenbankänderungen einspielen, Rollen und
+Berechtigungen einlesen, für den Produktivbetrieb optimieren, eigene Datei
+löschen. Es legt keine Datenbank an, spielt keine Startdaten ein und kann
+nichts zurücksetzen.
+
+Zwei Sicherungen sind eingebaut:
+
+- **Sperre bei fehlerhafter `.env`.** Vor allen Schritten wird die `.env`
+  zeilenweise geprüft. Findet die Prüfung einen Fehler, der den Start
+  verhindert, sind alle Schaltflächen gesperrt und die betroffenen
+  Zeilennummern werden benannt. Grund siehe unten.
+- **Rücknahme der Optimierung.** Bricht `config:cache`, `route:cache` oder
+  `view:cache` ab, werden die bereits geschriebenen Dateien wieder entfernt.
+  Ohne Zwischenspeicher ist die Anwendung langsamer, aber erreichbar.
+  Erreichbarkeit geht vor.
+
+## `notfall.php` – Notfalldiagnose bei Serverfehler 500
+
+Antwortet die Anwendung auf jeder Seite mit einem nackten Serverfehler 500,
+ist die Ursache meist **nicht** im Anwendungsprotokoll zu finden. `notfall.php`
+arbeitet deshalb zuerst ohne das Framework:
+
+1. zeilenweise Prüfung der `.env` mit Zeilennummer und Ursache
+2. Zustand der Zwischenspeicher
+3. Startversuch des Frameworks mit Anzeige der Ausnahme im Klartext
+4. letzte 40 Zeilen des Anwendungsprotokolls
+5. Entfernen der Zwischenspeicher **auf Dateiebene**, funktioniert also auch
+   dann, wenn das Framework nicht mehr startet
+6. Entfernen von `diagnose.php` und `pruefung.php`, falls noch vorhanden
+
+Werte aus der `.env` werden nie angezeigt, auch nicht in Auszügen. Ein Befund
+nennt Zeilennummer, Namen der Einstellung und Ursache. Eine gestörte Zeile kann
+Teil eines Schlüssels oder Kennworts sein.
+
+### Warum ein Fehler in der `.env` erst später auffällt
+
+Die `.env` wird gelesen, bevor Laravel eine Fehlerbehandlung oder ein Protokoll
+besitzt. Bei einer ungültigen Zeile setzt das Framework HTTP 500, schreibt die
+Meldung nach `stderr` und beendet den Prozess mit `exit`. In der Antwort steht
+also nichts, im Anwendungsprotokoll ebenfalls nichts, und ein `try/catch`
+greift nicht.
+
+Entscheidend: Solange `bootstrap/cache/config.php` vorhanden ist, wird die
+`.env` **überhaupt nicht gelesen**. Ein Fehler bleibt dann verdeckt und wirkt
+erst in dem Moment, in dem der Zwischenspeicher geleert wird, also
+typischerweise unmittelbar nach einem Datei-Upload.
+
+Häufigste Ursache in der Praxis: ein mehrzeiliger Wert, etwa ein privater
+SSH-Schlüssel, wird von Hand aus der `.env` entfernt und es bleiben Zeilen wie
+`-----END OPENSSH PRIVATE KEY-----` stehen. Solche Zeilen enthalten kein
+Gleichheitszeichen und sind damit weder Einstellung noch Kommentar.
+
+Die geprüften Regeln liegen in `app/Support/EnvFileInspector.php` und werden in
+`tests/Unit/EnvFileInspectorTest.php` gegen den tatsächlich verwendeten Parser
+abgeglichen.

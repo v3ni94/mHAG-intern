@@ -14,7 +14,8 @@
                                     : 'Anfrage als versendet markieren? Der Versand erfolgt beim manuellen Prozess außerhalb des Systems.'"
                                 label="Versenden" icon="bi-send" class="btn btn-primary btn-sm" />
             @endif
-            @if ($request->status?->value !== 'draft' && $request->status?->value !== 'completed')
+            @if ($request->status?->value !== 'draft' && $request->status?->value !== 'completed'
+                && \Illuminate\Support\Facades\Route::has('signatures.sync'))
                 {{-- Status beim Anbieter abfragen (Abschnitt 102) --}}
                 <form method="POST" action="{{ route('signatures.sync', $request) }}">
                     @csrf

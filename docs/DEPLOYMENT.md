@@ -157,6 +157,33 @@ systemctl restart mhag-intranet-worker
 php artisan up
 ```
 
+## 6a. Serverfehler 500 auf jeder Seite
+
+Erster Verdacht ist die `.env`, nicht der Anwendungscode. Die Datei wird
+gelesen, bevor Laravel eine Fehlerbehandlung besitzt: bei einer ungültigen
+Zeile wird HTTP 500 gesetzt, die Meldung geht nach `stderr` und der Prozess
+endet mit `exit`. In der Antwort und im Anwendungsprotokoll steht dann nichts.
+
+Solange `bootstrap/cache/config.php` vorhanden ist, wird die `.env` nicht
+gelesen. Ein Fehler bleibt deshalb verdeckt und wirkt erst, wenn der
+Zwischenspeicher geleert wird, also typischerweise direkt nach einem Upload.
+
+Mit Kommandozeile:
+
+```bash
+php artisan config:clear     # zeigt die Meldung im Klartext
+```
+
+Ohne Kommandozeile: `tools/web-setup/notfall.php` mit Zugriffsschlüssel nach
+`public/` hochladen und aufrufen. Die Seite prüft die `.env` zeilenweise, ohne
+Werte anzuzeigen, und kann die Zwischenspeicher auf Dateiebene entfernen.
+Beschreibung in `tools/web-setup/LIESMICH.md`.
+
+Häufigste Ursache: Reste eines mehrzeiligen Wertes, etwa
+`-----END OPENSSH PRIVATE KEY-----`, nach dem Entfernen eines privaten
+Schlüssels von Hand. Solche Zeilen haben kein Gleichheitszeichen und sind
+weder Einstellung noch Kommentar.
+
 ## 7. Überwachung
 
 - Admin-Bereich: Systemstatus (DB, Queue, Backups, SFTP, fehlgeschlagene Logins,

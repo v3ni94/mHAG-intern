@@ -135,9 +135,15 @@
                 <a href="{{ route('admin.settings.index') }}" class="{{ request()->routeIs('admin.settings.*') ? 'active' : '' }}">
                     <i class="bi bi-sliders"></i> Einstellungen
                 </a>
-                <a href="{{ route('admin.docusign.index') }}" class="{{ request()->routeIs('admin.docusign.*') ? 'active' : '' }}">
-                    <i class="bi bi-pen"></i> DocuSign
-                </a>
+                {{-- Absicherung: nach einem Datei-Upload kann das Routenverzeichnis
+                     noch zwischengespeichert sein und neue Namen nicht kennen.
+                     Ohne diese Pruefung wuerde die gesamte Anwendung abbrechen,
+                     statt nur diesen Menuepunkt auszulassen. --}}
+                @if (\Illuminate\Support\Facades\Route::has('admin.docusign.index'))
+                    <a href="{{ route('admin.docusign.index') }}" class="{{ request()->routeIs('admin.docusign.*') ? 'active' : '' }}">
+                        <i class="bi bi-pen"></i> DocuSign
+                    </a>
+                @endif
                 <a href="{{ route('admin.sftp.index') }}" class="{{ request()->routeIs('admin.sftp.*') ? 'active' : '' }}">
                     <i class="bi bi-hdd-network"></i> SFTP
                 </a>

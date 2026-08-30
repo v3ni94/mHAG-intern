@@ -96,6 +96,54 @@ function envSet(string $path, string $key, string $value): bool
     return file_put_contents($path, $content) !== false;
 }
 
+/**
+ * Prüft die Konfigurationsdatei auf Syntaxfehler, BEVOR die Anwendung geladen
+ * wird. Nötig, weil ein ungültiger Wert dort zum sofortigen Abbruch führt, den
+ * keine Fehlerbehandlung mehr abfangen kann: Die Anwendung antwortet dann mit
+ * einem nackten Serverfehler 500 ohne jede Meldung.
+ *
+ * Beanstandet werden Werte mit Leerzeichen ohne Anführungszeichen sowie
+ * verbliebene Platzhalter in spitzen Klammern.
+ */
+function envProbleme($path)
+{
+    $probleme = array();
+    if (! is_readable($path)) {
+        return $probleme;
+    }
+    $zeilen = file($path, FILE_IGNORE_NEW_LINES);
+    $nummer = 0;
+    foreach ($zeilen as $zeile) {
+        $nummer++;
+        $roh = trim($zeile);
+        if ($roh === '' || strpos($roh, '#') === 0) {
+            continue;
+        }
+        if (strpos($roh, '=') === false) {
+            continue;
+        }
+        $teile = explode('=', $roh, 2);
+        $schluessel = trim($teile[0]);
+        $wert = trim($teile[1]);
+
+        if (strpos($wert, '<') !== false || strpos($wert, '>') !== false) {
+            $probleme[] = 'Zeile '.$nummer.' ('.$schluessel.'): Der Platzhalter in spitzen Klammern wurde nicht ersetzt.';
+
+            continue;
+        }
+
+        $inAnfuehrungszeichen = (strlen($wert) >= 2)
+            && ((substr($wert, 0, 1) === '"' && substr($wert, -1) === '"')
+                || (substr($wert, 0, 1) === "'" && substr($wert, -1) === "'"));
+
+        if (! $inAnfuehrungszeichen && $wert !== '' && preg_match('/\\s/', $wert)) {
+            $probleme[] = 'Zeile '.$nummer.' ('.$schluessel.'): Der Wert enthält Leerzeichen und muss in Anführungszeichen stehen, oder das Leerzeichen ist zu entfernen.';
+        }
+    }
+
+    return $probleme;
+}
+
 /** Einzelnen Wert aus der .env lesen. */
 function envGet(string $path, string $key): ?string
 {
@@ -149,10 +197,14 @@ if ($action === 'generate_key') {
     }
 }
 
+// Konfigurationsdatei vorab prüfen: ein ungültiger Wert führt beim Laden der
+// Anwendung zum Abbruch ohne Meldung.
+$envFehler = file_exists($envPath) ? envProbleme($envPath) : [];
+
 // Laravel für Datenbankprüfung und Migrationen laden
 $app = null;
 $laravelError = null;
-if (file_exists($basePath.'/vendor/autoload.php') && file_exists($envPath)) {
+if ($envFehler === [] && file_exists($basePath.'/vendor/autoload.php') && file_exists($envPath)) {
     try {
         // Plattformprüfung von Composer vorab auswerten: sie beendet den
         // Vorgang sonst mit einem nicht abfangbaren Fehler.
@@ -195,6 +247,21 @@ if ($action === 'migrate' && $app !== null) {
     }
 }
 
+if ($action === 'reset_database' && $app !== null) {
+    @set_time_limit(600);
+    try {
+        // Entfernt ALLE Tabellen der Datenbank und baut sie neu auf. Nötig,
+        // wenn Reste eines früheren Einrichtungsversuchs vorhanden sind und
+        // die Einrichtung deshalb mit "Table already exists" abbricht.
+        Illuminate\Support\Facades\Artisan::call('migrate:fresh', ['--force' => true, '--seed' => true]);
+        $output = Illuminate\Support\Facades\Artisan::output();
+        $messages[] = ['ok', 'Die Datenbank wurde vollständig neu aufgebaut. Struktur und Startdaten sind angelegt.'];
+        $messages[] = ['pre', $output];
+    } catch (Throwable $e) {
+        $messages[] = ['error', 'Der Neuaufbau ist fehlgeschlagen: '.$e->getMessage()];
+    }
+}
+
 if ($action === 'optimize' && $app !== null) {
     try {
         foreach (['config:cache', 'route:cache', 'view:cache'] as $command) {
@@ -228,6 +295,15 @@ foreach (['bcmath', 'pdo_mysql', 'mbstring', 'openssl', 'curl', 'dom', 'zip', 'g
 $envExists = file_exists($envPath);
 $checks[] = status('Konfigurationsdatei .env', $envExists, $envExists ? 'vorhanden' : 'fehlt');
 if ($envExists) {
+    $checks[] = status(
+        '.env fehlerfrei lesbar',
+        $envFehler === [],
+        $envFehler === []
+            ? 'keine Beanstandungen'
+            : implode(' | ', $envFehler),
+    );
+}
+if ($envExists) {
     $checks[] = status('.env beschreibbar', is_writable($envPath), is_writable($envPath) ? 'ja' : 'nein, Schreibrechte erforderlich');
 }
 
@@ -244,12 +320,14 @@ $checks[] = status('Anwendungsschlüssel gesetzt', $keySet, $keySet ? 'ja' : 'ne
 $dbOk = false;
 $dbDetail = 'nicht geprüft';
 $tableCount = 0;
+$dbName = '';
 if ($app !== null) {
     try {
         $connection = Illuminate\Support\Facades\DB::connection();
         $connection->getPdo();
         $dbOk = true;
         $database = $connection->getDatabaseName();
+        $dbName = $database;
         $tableCount = count($connection->select('SHOW TABLES'));
         $dbDetail = 'Verbindung zu "'.$database.'" erfolgreich, '.$tableCount.' Tabellen vorhanden';
     } catch (Throwable $e) {
@@ -427,6 +505,13 @@ foreach ($checks as $check) {
                 <?php if ($migrated): ?>
                     <p><span class="ok">Die Datenbank ist bereits eingerichtet</span> (<?= (int) $tableCount ?> Tabellen).
                         Ein erneuter Aufruf ergänzt nur fehlende Strukturen und überschreibt keine Daten.</p>
+                <?php elseif ($dbOk && $tableCount > 0): ?>
+                    <div class="msg warn">
+                        <strong>Es liegen bereits <?= (int) $tableCount ?> Tabellen in der Datenbank, die nicht von dieser
+                        Anwendung stammen.</strong> Meist sind das Reste eines früheren Einrichtungsversuchs, etwa eines
+                        abgebrochenen Imports über phpMyAdmin. In diesem Zustand bricht die Einrichtung mit der Meldung
+                        "Table already exists" ab. Verwenden Sie dann den Neuaufbau unterhalb.
+                    </div>
                 <?php endif; ?>
                 <form method="post" onsubmit="this.querySelector('button').disabled = true; this.querySelector('button').textContent = 'Wird eingerichtet ...';">
                     <input type="hidden" name="token" value="<?= htmlspecialchars($token) ?>">
@@ -438,6 +523,23 @@ foreach ($checks as $check) {
                 <?php if (! ($dbOk && $keySet)): ?>
                     <p style="color:#B77400;">Erst möglich, wenn Datenbankverbindung und Anwendungsschlüssel in Ordnung sind.</p>
                 <?php endif; ?>
+
+                <details style="margin-top: 14px;">
+                    <summary style="cursor: pointer; color: #B3261E; font-size: 14px;">Datenbank vollständig neu aufbauen</summary>
+                    <div class="msg error" style="margin-top: 10px;">
+                        <strong>Achtung:</strong> Dieser Schritt löscht ALLE Tabellen der Datenbank
+                        <?= htmlspecialchars((string) ($dbName ?? '')) ?> und legt sie neu an. Vorhandene Daten
+                        sind danach unwiederbringlich verloren. Verwenden Sie ihn ausschließlich bei der
+                        Ersteinrichtung, wenn Reste eines früheren Versuchs die Einrichtung blockieren.
+                    </div>
+                    <form method="post" onsubmit="return confirm('Wirklich ALLE Tabellen dieser Datenbank löschen und neu anlegen? Vorhandene Daten sind danach verloren.');">
+                        <input type="hidden" name="token" value="<?= htmlspecialchars($token) ?>">
+                        <input type="hidden" name="action" value="reset_database">
+                        <button type="submit" class="danger" <?= $dbOk && $keySet ? '' : 'disabled' ?>>
+                            Alle Tabellen löschen und neu anlegen
+                        </button>
+                    </form>
+                </details>
             </div>
         </div>
 

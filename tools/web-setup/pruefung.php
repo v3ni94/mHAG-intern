@@ -46,6 +46,54 @@ register_shutdown_function(function () {
     }
 });
 
+/**
+ * Prüft die Konfigurationsdatei auf Syntaxfehler, BEVOR die Anwendung geladen
+ * wird. Nötig, weil ein ungültiger Wert dort zum sofortigen Abbruch führt, den
+ * keine Fehlerbehandlung mehr abfangen kann: Die Anwendung antwortet dann mit
+ * einem nackten Serverfehler 500 ohne jede Meldung.
+ *
+ * Beanstandet werden Werte mit Leerzeichen ohne Anführungszeichen sowie
+ * verbliebene Platzhalter in spitzen Klammern.
+ */
+function envProbleme($path)
+{
+    $probleme = array();
+    if (! is_readable($path)) {
+        return $probleme;
+    }
+    $zeilen = file($path, FILE_IGNORE_NEW_LINES);
+    $nummer = 0;
+    foreach ($zeilen as $zeile) {
+        $nummer++;
+        $roh = trim($zeile);
+        if ($roh === '' || strpos($roh, '#') === 0) {
+            continue;
+        }
+        if (strpos($roh, '=') === false) {
+            continue;
+        }
+        $teile = explode('=', $roh, 2);
+        $schluessel = trim($teile[0]);
+        $wert = trim($teile[1]);
+
+        if (strpos($wert, '<') !== false || strpos($wert, '>') !== false) {
+            $probleme[] = 'Zeile '.$nummer.' ('.$schluessel.'): Der Platzhalter in spitzen Klammern wurde nicht ersetzt.';
+
+            continue;
+        }
+
+        $inAnfuehrungszeichen = (strlen($wert) >= 2)
+            && ((substr($wert, 0, 1) === '"' && substr($wert, -1) === '"')
+                || (substr($wert, 0, 1) === "'" && substr($wert, -1) === "'"));
+
+        if (! $inAnfuehrungszeichen && $wert !== '' && preg_match('/\s/', $wert)) {
+            $probleme[] = 'Zeile '.$nummer.' ('.$schluessel.'): Der Wert enthält Leerzeichen und muss in Anführungszeichen stehen, oder das Leerzeichen ist zu entfernen.';
+        }
+    }
+
+    return $probleme;
+}
+
 function schritt(&$schritte, $nummer, $titel, $ok, $detail)
 {
     $schritte[] = array('nummer' => $nummer, 'titel' => $titel, 'ok' => $ok, 'detail' => $detail);
@@ -169,17 +217,29 @@ if (count($vorhandeneCaches) === 0) {
         . implode(', ', $meldungen));
 }
 
+// Konfigurationsdatei prüfen, bevor die Anwendung geladen wird
+$envPfad = $base . '/.env';
+$envFehler = file_exists($envPfad) ? envProbleme($envPfad) : array('Die Datei .env fehlt.');
+schritt($schritte, 4, 'Konfigurationsdatei .env fehlerfrei',
+    count($envFehler) === 0,
+    count($envFehler) === 0
+        ? 'keine Beanstandungen'
+        : implode(' | ', $envFehler));
+if (count($envFehler) > 0) {
+    $abbruch = true;
+}
+
 // ---------------------------------------------------------------------------
-// Schritt 4 bis 7: Anwendung schrittweise starten
+// Weitere Schritte: Anwendung schrittweise starten
 // ---------------------------------------------------------------------------
 $app = null;
 
 if (!$abbruch) {
     try {
         require $base . '/vendor/autoload.php';
-        schritt($schritte, 4, 'Klassenlader geladen (vendor/autoload.php)', true, 'erfolgreich');
+        schritt($schritte, 5, 'Klassenlader geladen (vendor/autoload.php)', true, 'erfolgreich');
     } catch (Throwable $e) {
-        schritt($schritte, 4, 'Klassenlader geladen (vendor/autoload.php)', false,
+        schritt($schritte, 5, 'Klassenlader geladen (vendor/autoload.php)', false,
             get_class($e) . ': ' . $e->getMessage() . ' (' . $e->getFile() . ', Zeile ' . $e->getLine() . ')');
         $abbruch = true;
     }
@@ -188,9 +248,9 @@ if (!$abbruch) {
 if (!$abbruch) {
     try {
         $app = require_once $base . '/bootstrap/app.php';
-        schritt($schritte, 5, 'Anwendung erzeugt (bootstrap/app.php)', true, 'erfolgreich');
+        schritt($schritte, 6, 'Anwendung erzeugt (bootstrap/app.php)', true, 'erfolgreich');
     } catch (Throwable $e) {
-        schritt($schritte, 5, 'Anwendung erzeugt (bootstrap/app.php)', false,
+        schritt($schritte, 6, 'Anwendung erzeugt (bootstrap/app.php)', false,
             get_class($e) . ': ' . $e->getMessage() . ' (' . $e->getFile() . ', Zeile ' . $e->getLine() . ')');
         $abbruch = true;
     }
@@ -199,10 +259,10 @@ if (!$abbruch) {
 if (!$abbruch) {
     try {
         $app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
-        schritt($schritte, 6, 'Konfiguration und Dienste geladen', true,
+        schritt($schritte, 7, 'Konfiguration und Dienste geladen', true,
             'Umgebung: ' . $app->environment() . ', Fehleranzeige: ' . (config('app.debug') ? 'ein' : 'aus'));
     } catch (Throwable $e) {
-        schritt($schritte, 6, 'Konfiguration und Dienste geladen', false,
+        schritt($schritte, 7, 'Konfiguration und Dienste geladen', false,
             get_class($e) . ': ' . $e->getMessage() . ' (' . $e->getFile() . ', Zeile ' . $e->getLine() . ')');
         $abbruch = true;
     }
@@ -213,11 +273,11 @@ if (!$abbruch) {
         $verbindung = Illuminate\Support\Facades\DB::connection();
         $verbindung->getPdo();
         $tabellen = $verbindung->select('SHOW TABLES');
-        schritt($schritte, 7, 'Datenbankverbindung', true,
+        schritt($schritte, 8, 'Datenbankverbindung', true,
             'Verbindung zu "' . $verbindung->getDatabaseName() . '" steht, '
             . count($tabellen) . ' Tabellen vorhanden');
     } catch (Throwable $e) {
-        schritt($schritte, 7, 'Datenbankverbindung', false,
+        schritt($schritte, 8, 'Datenbankverbindung', false,
             get_class($e) . ': ' . $e->getMessage());
     }
 }

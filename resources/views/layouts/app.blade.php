@@ -135,6 +135,9 @@
                 <a href="{{ route('admin.settings.index') }}" class="{{ request()->routeIs('admin.settings.*') ? 'active' : '' }}">
                     <i class="bi bi-sliders"></i> Einstellungen
                 </a>
+                <a href="{{ route('admin.docusign.index') }}" class="{{ request()->routeIs('admin.docusign.*') ? 'active' : '' }}">
+                    <i class="bi bi-pen"></i> DocuSign
+                </a>
                 <a href="{{ route('admin.sftp.index') }}" class="{{ request()->routeIs('admin.sftp.*') ? 'active' : '' }}">
                     <i class="bi bi-hdd-network"></i> SFTP
                 </a>

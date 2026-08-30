@@ -20,9 +20,18 @@ class AppServiceProvider extends ServiceProvider
             \App\Services\Storage\FlysystemDocumentStorage::class,
         );
 
+        /*
+         * Signaturweg ueber die Konfiguration waehlen (config/signatures.php).
+         * Standard bleibt der manuelle Weg; DocuSign wird nur verwendet, wenn
+         * es ausdruecklich eingestellt ist. Ein unbekannter Wert faellt auf
+         * den manuellen Weg zurueck, damit nie ein Versand ins Leere laeuft.
+         */
         $this->app->bind(
             \App\Services\Signature\SignatureServiceInterface::class,
-            \App\Services\Signature\ManualSignatureAdapter::class,
+            fn ($app) => match ((string) config('signatures.provider')) {
+                'docusign' => $app->make(\App\Services\Signature\DocuSignAdapter::class),
+                default => $app->make(\App\Services\Signature\ManualSignatureAdapter::class),
+            },
         );
     }
 

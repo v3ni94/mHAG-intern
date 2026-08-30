@@ -40,6 +40,20 @@ Route::post('/logout', [LoginController::class, 'destroy'])->middleware('auth')-
 |--------------------------------------------------------------------------
 */
 
+/*
+|--------------------------------------------------------------------------
+| Rückkanal DocuSign (Abschnitt 102)
+|--------------------------------------------------------------------------
+|
+| Bewusst ohne Anmeldung: die Nachricht kommt von einem fremden Server. Die
+| Echtheit wird über die HMAC-Signatur geprüft, der Inhalt selbst wird nicht
+| als Wahrheit genommen; der Status wird bei DocuSign abgefragt.
+|
+*/
+Route::post('/webhooks/docusign', \App\Http\Controllers\DocuSignWebhookController::class)
+    ->middleware('throttle:60,1')
+    ->name('webhooks.docusign');
+
 Route::middleware(['auth', 'active', 'two-factor'])->group(function () {
     Route::redirect('/', '/dashboard');
 

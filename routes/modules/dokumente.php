@@ -77,3 +77,10 @@ Route::prefix('admin/sftp')->middleware('permission:admin.sftp')->group(function
     Route::get('/', [SftpController::class, 'index'])->name('admin.sftp.index');
     Route::post('/test', [SftpController::class, 'test'])->name('admin.sftp.test');
 });
+
+// ---------- Administration: DocuSign (Abschnitte 99 bis 102) ----------
+Route::prefix('admin/docusign')->middleware('permission:admin.settings')->group(function () {
+    Route::get('/', [\App\Http\Controllers\Admin\DocuSignController::class, 'index'])->name('admin.docusign.index');
+    Route::post('/test', [\App\Http\Controllers\Admin\DocuSignController::class, 'test'])
+        ->middleware('throttle:10,1')->name('admin.docusign.test');
+});

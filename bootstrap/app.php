@@ -35,6 +35,16 @@ return Application::configure(basePath: dirname(__DIR__))
             'fc00::/7',
         ]);
 
+        /*
+         * Der Rueckkanal von DocuSign (Connect) kommt von einem fremden
+         * Server ohne Sitzung und ohne CSRF-Token. Die Echtheit wird
+         * stattdessen ueber die HMAC-Signatur der Nachricht geprueft
+         * (DocuSignWebhookController).
+         */
+        $middleware->validateCsrfTokens(except: [
+            'webhooks/docusign',
+        ]);
+
         $middleware->alias([
             'active' => EnsureUserIsActive::class,
             'two-factor' => RequireTwoFactor::class,

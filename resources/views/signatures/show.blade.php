@@ -6,10 +6,23 @@
             <i class="bi bi-arrow-left"></i> Zur Übersicht
         </a>
         @can('resolutions.sign')
+            @php($istDocuSign = $request->provider === 'docusign')
             @if ($request->status?->value === 'draft')
                 <x-confirm-form :action="route('signatures.send', $request)"
-                                confirm="Anfrage als versendet markieren? Der Versand erfolgt beim manuellen Prozess außerhalb des Systems."
+                                :confirm="$istDocuSign
+                                    ? 'Umschlag jetzt bei DocuSign erzeugen und an die Unterzeichner versenden?'
+                                    : 'Anfrage als versendet markieren? Der Versand erfolgt beim manuellen Prozess außerhalb des Systems.'"
                                 label="Versenden" icon="bi-send" class="btn btn-primary btn-sm" />
+            @endif
+            @if ($request->status?->value !== 'draft' && $request->status?->value !== 'completed')
+                {{-- Status beim Anbieter abfragen (Abschnitt 102) --}}
+                <form method="POST" action="{{ route('signatures.sync', $request) }}">
+                    @csrf
+                    <button class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-arrow-repeat"></i>
+                        {{ $istDocuSign ? 'Status bei DocuSign abfragen' : 'Status aktualisieren' }}
+                    </button>
+                </form>
             @endif
         @endcan
     </x-page-header>
@@ -23,6 +36,13 @@
                 </div>
                 <div class="card-body">
                     <dl class="row mb-0">
+                        <dt class="col-sm-5">Signaturweg</dt>
+                        <dd class="col-sm-7">
+                            {{ $request->provider === 'docusign' ? 'DocuSign' : 'Manuell' }}
+                            @if ($request->external_id)
+                                <div class="small text-muted">Umschlag: {{ $request->external_id }}</div>
+                            @endif
+                        </dd>
                         <dt class="col-sm-5">Vorgang</dt>
                         <dd class="col-sm-7">
                             {{ class_basename($request->subject_type) }}

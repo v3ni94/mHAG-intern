@@ -115,6 +115,8 @@ Route::get('/signaturen/{signature_request}', [SignatureRequestController::class
     ->middleware('permission:resolutions.view')->name('signatures.show');
 Route::post('/signaturen/{signature_request}/versenden', [SignatureRequestController::class, 'send'])
     ->middleware('permission:resolutions.sign')->name('signatures.send');
+Route::post('/signaturen/{signature_request}/status-abfragen', [SignatureRequestController::class, 'sync'])
+    ->middleware('permission:resolutions.sign')->name('signatures.sync');
 Route::post('/signaturen/{signature_request}/teilnehmerstatus', [SignatureRequestController::class, 'mark'])
     ->middleware('permission:resolutions.sign')->name('signatures.mark');
 Route::post('/signaturen/{signature_request}/signiertes-dokument', [SignatureRequestController::class, 'attachSigned'])

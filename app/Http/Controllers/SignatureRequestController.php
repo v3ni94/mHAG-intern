@@ -155,11 +155,46 @@ class SignatureRequestController extends Controller
                 ->with('warning', 'Die Anfrage ist bereits abgeschlossen.');
         }
 
-        $this->signatures->send($signatureRequest);
+        try {
+            $this->signatures->send($signatureRequest);
+        } catch (\Throwable $e) {
+            // Fehler des Anbieters nicht verschlucken: der Bearbeiter muss
+            // wissen, dass NICHT versendet wurde und warum.
+            return redirect()
+                ->route('signatures.show', $signatureRequest)
+                ->with('danger', 'Der Versand ist nicht erfolgt: '.$e->getMessage());
+        }
+
+        $meldung = $signatureRequest->fresh()->provider === 'docusign'
+            ? 'Die Anfrage wurde an DocuSign übergeben und versendet.'
+            : 'Die Anfrage wurde als versendet markiert. Beim manuellen Prozess erfolgt der Versand außerhalb des Systems.';
 
         return redirect()
             ->route('signatures.show', $signatureRequest)
-            ->with('success', 'Die Anfrage wurde als versendet markiert. Beim manuellen Prozess erfolgt der Versand außerhalb des Systems.');
+            ->with('success', $meldung);
+    }
+
+    /**
+     * Status beim Anbieter abfragen (Abschnitt 102). Beim manuellen Weg wird
+     * der Gesamtstatus aus den Teilnehmerstatus abgeleitet; bei DocuSign wird
+     * der Umschlag abgefragt und bei Abschluss die unterschriebene Fassung
+     * übernommen.
+     */
+    public function sync(SignatureRequest $signatureRequest)
+    {
+        try {
+            $this->signatures->syncStatus($signatureRequest);
+        } catch (\Throwable $e) {
+            return redirect()
+                ->route('signatures.show', $signatureRequest)
+                ->with('danger', 'Der Status konnte nicht abgefragt werden: '.$e->getMessage());
+        }
+
+        $aktuell = $signatureRequest->fresh();
+
+        return redirect()
+            ->route('signatures.show', $signatureRequest)
+            ->with('success', 'Status abgefragt. Stand: '.($aktuell->status?->label() ?? 'unbekannt').'.');
     }
 
     /** Teilnehmerstatus manuell pflegen (Abschnitt 102, manueller Adapter). */

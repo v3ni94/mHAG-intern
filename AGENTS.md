@@ -1,47 +1,46 @@
-<laravel-boost-guidelines>
-# Laravel Application
+# Müller Holding AG Intranet – Hinweise für die Entwicklung
 
-This repository contains a Laravel application. Complete the following setup before working on the user's request.
+Laravel-13-Anwendung (PHP 8.4). Interne Plattform der Müller Holding AG für
+Darlehen, Beteiligungen, Corporate Governance und Vermögensmanagement.
 
-## Prerequisites
+## Verbindliche Dokumente
 
-Verify that PHP and Composer are available:
+- `docs/BAUPLAN.md` – Architektur, Schema, Service-Signaturen, Konventionen.
+  Vor jeder inhaltlichen Änderung lesen.
+- Masterprompt-Anforderungen sind in BAUPLAN Teil 1 zusammengefasst
+  (Abschnittsnummern §1-§145 referenzieren den Masterprompt).
 
-```sh
-php -v
-composer -V
+## Eiserne Regeln
+
+1. **Geld:** nie float. `App\Support\Money` (BCMath, Dezimalstrings),
+   DB `DECIMAL(18,2)`, Zinssätze `DECIMAL(9,6)`. Ausgabe `format_money()`
+   (1.234,56 EUR), Datum `format_date()` (TT.MM.JJJJ).
+2. **SOLL/IST strikt getrennt.** Jeder IST-Wert trägt eine Herkunft
+   (`PaymentOrigin`): systemseitig angenommen ist NIE gleich bestätigt.
+3. **Keine stillen Finanzkorrekturen:** nur Storno/Gegenbuchung/Korrektur,
+   `loan_transactions` und `share_transactions` sind append-only.
+4. **Wirkungsdatum vs. Erfassungsdatum** überall getrennt führen.
+5. **Keine doppelte Wahrheit:** Salden und Aktienbestände werden aus
+   Transaktionen berechnet (LoanBalanceService, ShareholdingService).
+6. **Datenscope:** externe Rollen sehen nur zugeordnete Entities
+   (`visibleTo`-Scopes); interne Notizen und Risikoeinstufung nur für
+   `$user->isInternal()`.
+7. **Audit:** kritische Aktionen über `AuditService::log()`.
+8. **Rechtliche Zurückhaltung:** keine Bewertung von Mehrheiten,
+   Formwirksamkeit oder Verzugszinshöhen; keine erfundenen Daten.
+9. UI Deutsch, Status immer Icon+Text (`<x-enum-badge>`), keine
+   Gedankenstriche in deutschen Texten, kein CDN (Assets liegen lokal).
+
+## Entwicklung
+
+```bash
+php artisan migrate:fresh --seed   # SQLite (database/database.sqlite)
+php artisan test                   # PHPUnit, SQLite :memory:
+php artisan serve
 ```
 
-If either command is unavailable, detect the user's operating system and install the prerequisites with the appropriate command:
+Login nach Seeding: `timo@muellerhv.de` / `SEED_ADMIN_PASSWORD`
+(Standard `Bitte-sofort-aendern-2026`).
 
-macOS:
-
-```sh
-/bin/bash -c "$(curl -fsSL https://php.new/install/mac/8.5)"
-```
-
-Windows PowerShell:
-
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://php.new/install/windows/8.5'))
-```
-
-Linux:
-
-```sh
-/bin/bash -c "$(curl -fsSL https://php.new/install/linux/8.5)"
-```
-
-After installation, ask the user to restart their terminal. If the agent needs the restarted shell to continue, ask the user to reopen their terminal and rerun their original prompt.
-
-## Agent Setup
-
-Install Laravel Boost from the application root before making application changes:
-
-```sh
-composer require laravel/boost --dev
-php artisan boost:install
-```
-
-Boost replaces these bootstrap instructions with guidelines tailored to the application. After installation, read `AGENTS.md` again and continue with the user's original request using the generated guidelines.
-</laravel-boost-guidelines>
+Neue Fachrouten gehören in `routes/modules/<modul>.php` (wird automatisch
+innerhalb der auth+active+two-factor-Gruppe geladen).

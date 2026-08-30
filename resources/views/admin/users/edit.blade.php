@@ -77,9 +77,37 @@
         <div class="card mb-3">
             <div class="card-header">Datenbereich (sichtbare Entitäten für externe Rollen)</div>
             <div class="card-body">
+                {{-- Sichtbarkeitsmodus (Anforderung 30.08.2026) --}}
+                @php($modus = old('entity_scope_mode', $user->entityScopeMode()->value))
+                <div class="mb-3">
+                    <label class="form-label" for="entity_scope_mode">
+                        Sichtbarkeit
+                        <x-help-icon text="Gilt nur für externe Rollen. Interne Rollen sehen unabhängig davon den Gesamtbestand." />
+                    </label>
+                    <select id="entity_scope_mode" name="entity_scope_mode" class="form-select">
+                        @foreach (\App\Enums\EntityScopeMode::cases() as $case)
+                            <option value="{{ $case->value }}" @selected($modus === $case->value)>{{ $case->label() }}</option>
+                        @endforeach
+                    </select>
+                    <div class="form-text">
+                        @foreach (\App\Enums\EntityScopeMode::cases() as $case)
+                            <div class="{{ $modus === $case->value ? 'fw-semibold' : '' }}">
+                                <strong>{{ $case->label() }}:</strong> {{ $case->description() }}
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+
                 <p class="text-muted small">
-                    Externe Benutzer (Darlehensgeber, Darlehensnehmer, Aktionäre, Aufsichtsrat) sehen ausschließlich
-                    Datensätze der hier zugeordneten Entitäten. Leere Zeilen werden ignoriert; entfernte Zeilen werden gelöscht.
+                    @if ($modus === \App\Enums\EntityScopeMode::Exclude->value)
+                        Die hier zugeordneten Entitäten werden <strong>ausgeschlossen</strong>. Alles andere ist
+                        sichtbar, auch später angelegte Gesellschaften. Ein Darlehen bleibt verborgen, sobald eine
+                        ausgeschlossene Gesellschaft als Darlehensgeber oder Darlehensnehmer beteiligt ist.
+                    @else
+                        Externe Benutzer (Darlehensgeber, Darlehensnehmer, Aktionäre, Aufsichtsrat) sehen
+                        ausschließlich Datensätze der hier zugeordneten Entitäten.
+                    @endif
+                    Leere Zeilen werden ignoriert; entfernte Zeilen werden gelöscht.
                 </p>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle" id="assignments-table">

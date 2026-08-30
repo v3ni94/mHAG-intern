@@ -86,6 +86,25 @@ class RolePermissionSeeder extends Seeder
                 'dashboard.view', 'loans.view', 'payments.view', 'contracts.view',
                 'documents.view', 'documents.download',
             ],
+            /*
+             * Partner (Anforderung 30.08.2026): externe Rolle mit
+             * Bearbeitungsrechten am Bestand. Der Datenumfang wird NICHT über
+             * die Rolle geregelt, sondern je Benutzer über den
+             * Sichtbarkeitsmodus: entweder nur die zugeordneten
+             * Gesellschaften oder alles außer den zugeordneten. Ohne
+             * Zuordnung sieht ein Partner im Einschlussmodus nichts.
+             *
+             * Bewusst NICHT enthalten: Aktien, Beschlüsse und Organe der
+             * Müller Holding AG sowie jede Administration.
+             */
+            'Partner' => [
+                'dashboard.view', 'persons.view', 'companies.view',
+                'loans.view', 'loans.create', 'loans.update',
+                'payments.view', 'payments.record',
+                'contracts.view', 'contracts.create', 'contracts.update',
+                'documents.view', 'documents.upload', 'documents.download',
+                'reports.view',
+            ],
             'Buchhaltung' => array_merge($viewAll, [
                 'payments.record', 'payments.correct', 'payments.cancel',
                 'documents.upload',

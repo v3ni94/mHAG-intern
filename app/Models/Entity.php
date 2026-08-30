@@ -141,11 +141,22 @@ class Entity extends Model
         $this->save();
     }
 
-    /** Datenscope: Externe Benutzer sehen nur explizit zugeordnete Entities. */
+    /**
+     * Datenscope (Abschnitt 14): Externe sehen nur zugeordnete Entities.
+     * Im Ausschlussmodus (Partner) umgekehrt: alle ausser den zugeordneten.
+     * Die Abfrage arbeitet dann mit whereNotIn, damit auch spaeter angelegte
+     * Gesellschaften ohne Zutun sichtbar sind.
+     */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         if ($user->isInternal()) {
             return $query;
+        }
+
+        if ($user->usesEntityExclusion()) {
+            $ausgeschlossen = $user->excludedEntityIds()->all();
+
+            return $ausgeschlossen === [] ? $query : $query->whereNotIn('id', $ausgeschlossen);
         }
 
         return $query->whereIn('id', $user->accessibleEntityIds());

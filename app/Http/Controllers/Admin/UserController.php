@@ -61,6 +61,7 @@ class UserController extends Controller
             'email' => $request->input('email'),
             'password' => $request->input('password'),
             'entity_id' => $request->input('entity_id'),
+            'entity_scope_mode' => $request->input('entity_scope_mode', \App\Enums\EntityScopeMode::Include->value),
             'is_active' => $request->boolean('is_active', true),
         ]);
         $user->syncRoles($request->input('roles', []));
@@ -116,6 +117,7 @@ class UserController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'entity_id' => $user->entity_id,
+            'entity_scope_mode' => $user->entityScopeMode()->value,
             'is_active' => $user->is_active,
             'roles' => $user->roles->pluck('name')->all(),
         ];
@@ -124,6 +126,9 @@ class UserController extends Controller
             'name' => $request->input('name'),
             'email' => $request->input('email'),
             'entity_id' => $request->input('entity_id'),
+            // Sichtbarkeitsmodus: ohne Angabe bleibt es beim Einschluss,
+            // also beim engeren der beiden Modi.
+            'entity_scope_mode' => $request->input('entity_scope_mode', \App\Enums\EntityScopeMode::Include->value),
             'is_active' => $request->boolean('is_active'),
         ]);
         if ($request->filled('password')) {
@@ -152,6 +157,7 @@ class UserController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'entity_id' => $user->entity_id,
+            'entity_scope_mode' => $user->entityScopeMode()->value,
             'is_active' => $user->is_active,
             'roles' => $request->input('roles', []),
             'assignments' => $assignments->values()->all(),

@@ -40,6 +40,7 @@ class User extends Authenticatable
             'privacy_mode' => 'boolean',
             'two_factor_secret' => 'encrypted',
             'two_factor_recovery_codes' => 'encrypted:array',
+            'entity_scope_mode' => \App\Enums\EntityScopeMode::class,
         ];
     }
 
@@ -117,16 +118,76 @@ class User extends Authenticatable
     }
 
     /**
-     * IDs aller Entities, auf die dieser Benutzer Zugriff hat (eigene Entity + Zuordnungen).
+     * Sichtbarkeitsmodus. Standard ist der Einschluss, also das bisherige
+     * Verhalten: sichtbar sind nur die zugeordneten Gesellschaften.
      */
-    public function accessibleEntityIds(): Collection
+    public function entityScopeMode(): \App\Enums\EntityScopeMode
+    {
+        if ($this->entity_scope_mode instanceof \App\Enums\EntityScopeMode) {
+            return $this->entity_scope_mode;
+        }
+
+        return \App\Enums\EntityScopeMode::tryFrom((string) $this->entity_scope_mode)
+            ?? \App\Enums\EntityScopeMode::Include;
+    }
+
+    /** Arbeitet dieser Benutzer im Ausschlussmodus (alles ausser ...)? */
+    public function usesEntityExclusion(): bool
+    {
+        return ! $this->isInternal()
+            && $this->entityScopeMode() === \App\Enums\EntityScopeMode::Exclude;
+    }
+
+    /**
+     * Ausdruecklich zugeordnete Entities. Je nach Modus ist das die
+     * Erlaubnisliste oder die Ausschlussliste.
+     */
+    public function scopedEntityIds(): Collection
     {
         $ids = $this->entityAssignments->pluck('entity_id');
         if ($this->entity_id) {
             $ids->push($this->entity_id);
         }
 
-        return $ids->unique()->values();
+        return $ids->filter()->unique()->values();
+    }
+
+    /**
+     * Ausgeschlossene Entities. Nur im Ausschlussmodus belegt; im
+     * Einschlussmodus leer, damit bestehende Auswertungen unveraendert
+     * bleiben.
+     */
+    public function excludedEntityIds(): Collection
+    {
+        if (! $this->usesEntityExclusion()) {
+            return collect();
+        }
+
+        // Die eigene Entity wird nicht ausgeschlossen: der Benutzer soll die
+        // eigene Akte sehen. Ausgeschlossen wird nur, was ausdruecklich
+        // zugeordnet ist.
+        return $this->entityAssignments->pluck('entity_id')->filter()->unique()->values();
+    }
+
+    /**
+     * IDs aller Entities, auf die dieser Benutzer Zugriff hat.
+     *
+     * Einschlussmodus: eigene Entity und Zuordnungen (bisheriges Verhalten).
+     * Ausschlussmodus: alle Entities ausser den zugeordneten. Neu angelegte
+     * Gesellschaften sind damit automatisch sichtbar, was der fachlichen
+     * Vorgabe "alles ausser X" entspricht.
+     */
+    public function accessibleEntityIds(): Collection
+    {
+        if ($this->usesEntityExclusion()) {
+            $ausgeschlossen = $this->excludedEntityIds()->all();
+
+            return Entity::query()
+                ->when($ausgeschlossen !== [], fn ($q) => $q->whereNotIn('id', $ausgeschlossen))
+                ->pluck('id');
+        }
+
+        return $this->scopedEntityIds();
     }
 
     /**

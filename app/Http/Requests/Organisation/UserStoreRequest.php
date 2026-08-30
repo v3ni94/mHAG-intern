@@ -20,6 +20,8 @@ class UserStoreRequest extends FormRequest
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'confirmed', Password::min(12)->letters()->numbers()],
             'entity_id' => ['nullable', 'integer', Rule::exists('entities', 'id')],
+            // Sichtbarkeitsmodus fuer externe Rollen (Anforderung 30.08.2026)
+            'entity_scope_mode' => ['nullable', Rule::enum(\App\Enums\EntityScopeMode::class)],
             'roles' => ['required', 'array', 'min:1'],
             'roles.*' => ['string', Rule::exists('roles', 'name')],
             'is_active' => ['nullable', 'boolean'],

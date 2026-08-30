@@ -42,12 +42,39 @@ class Document extends Model
     /**
      * Datenscope: Externe sehen nur Dokumente, die mit einer ihrer
      * Entities oder deren Darlehen verknüpft sind.
+     *
+     * Im Ausschlussmodus (Partner) gilt die Umkehrung: verborgen bleibt, was
+     * mit einer ausgeschlossenen Gesellschaft oder mit einem Darlehen einer
+     * ausgeschlossenen Gesellschaft verknüpft ist. Ein Dokument ohne
+     * Verknüpfung bleibt sichtbar, weil es keiner Gesellschaft zugeordnet ist.
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         if ($user->isInternal()) {
             return $query;
         }
+
+        if ($user->usesEntityExclusion()) {
+            $ausgeschlossen = $user->excludedEntityIds()->all();
+            if ($ausgeschlossen === []) {
+                return $query;
+            }
+
+            return $query->whereDoesntHave('links', function (Builder $q) use ($ausgeschlossen) {
+                $q->where(function (Builder $inner) use ($ausgeschlossen) {
+                    $inner->where('linkable_type', Entity::class)->whereIn('linkable_id', $ausgeschlossen);
+                })->orWhere(function (Builder $inner) use ($ausgeschlossen) {
+                    $inner->where('linkable_type', Loan::class)->whereIn(
+                        'linkable_id',
+                        Loan::query()->where(function (Builder $l) use ($ausgeschlossen) {
+                            $l->whereIn('lender_entity_id', $ausgeschlossen)
+                                ->orWhereIn('borrower_entity_id', $ausgeschlossen);
+                        })->select('id'),
+                    );
+                });
+            });
+        }
+
         $ids = $user->accessibleEntityIds()->all();
 
         return $query->whereHas('links', function (Builder $q) use ($ids) {

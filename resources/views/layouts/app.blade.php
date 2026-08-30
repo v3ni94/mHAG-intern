@@ -183,7 +183,15 @@
             </form>
 
             <div class="ms-auto d-flex align-items-center gap-2">
-                @php($contexts = auth()->user()?->entityAssignments ?? collect())
+                @php
+                    // Kontextwechsel nur im Einschlussmodus: im Ausschlussmodus
+                    // sind die Zuordnungen Ausschluesse und taugen nicht als
+                    // Ansicht (Anforderung 30.08.2026).
+                    $kontextBenutzer = auth()->user();
+                    $contexts = ($kontextBenutzer && ! $kontextBenutzer->usesEntityExclusion())
+                        ? $kontextBenutzer->entityAssignments
+                        : collect();
+                @endphp
                 @if ($contexts->count() > 1)
                     <div class="dropdown">
                         <button class="btn btn-outline-secondary btn-sm dropdown-toggle" data-bs-toggle="dropdown">

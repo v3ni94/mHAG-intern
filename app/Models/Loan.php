@@ -134,14 +134,33 @@ class Loan extends Model
     }
 
     /**
-     * Datenscope: Externe sehen nur Darlehen, bei denen eine zugeordnete
+     * Datenscope (Abschnitt 14).
+     *
+     * Einschlussmodus: sichtbar sind Darlehen, bei denen eine zugeordnete
      * Entity Darlehensgeber oder Darlehensnehmer ist.
+     *
+     * Ausschlussmodus (Partner): sichtbar ist alles, AUSSER Darlehen, an denen
+     * eine ausgeschlossene Gesellschaft beteiligt ist. Bewusst streng: sobald
+     * eine ausgeschlossene Gesellschaft auf einer der beiden Seiten steht,
+     * bleibt das Darlehen verborgen. Andernfalls waeren die Geschaefte der
+     * ausgeschlossenen Gesellschaft ueber die Gegenseite doch einsehbar.
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         if ($user->isInternal()) {
             return $query;
         }
+
+        if ($user->usesEntityExclusion()) {
+            $ausgeschlossen = $user->excludedEntityIds()->all();
+            if ($ausgeschlossen === []) {
+                return $query;
+            }
+
+            return $query->whereNotIn('lender_entity_id', $ausgeschlossen)
+                ->whereNotIn('borrower_entity_id', $ausgeschlossen);
+        }
+
         $ids = $user->accessibleEntityIds();
 
         return $query->where(function (Builder $q) use ($ids) {

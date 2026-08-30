@@ -25,19 +25,27 @@ final class Money
         return bcsub(self::normalize($a), self::normalize($b), $scale);
     }
 
+    /**
+     * Multiplikation. Die Operanden werden mit Rechengenauigkeit
+     * (CALC_SCALE) uebernommen, nicht auf zwei Nachkommastellen gekuerzt:
+     * Faktoren sind haeufig Zinssaetze, Tageszaehlfaktoren oder Kurse mit
+     * mehr als zwei Nachkommastellen (z. B. Preis je Aktie DECIMAL(18,4)).
+     * Das Ergebnis wird auf $scale gekuerzt; kaufmaennisch runden mit round().
+     */
     public static function mul(string|int|float|null $a, string|int|float|null $b, int $scale = self::CALC_SCALE): string
     {
-        return bcmul(self::normalize($a), self::normalize($b), $scale);
+        return bcmul(self::normalize($a, self::CALC_SCALE), self::normalize($b, self::CALC_SCALE), $scale);
     }
 
+    /** Division mit Rechengenauigkeit der Operanden, siehe mul(). */
     public static function div(string|int|float|null $a, string|int|float|null $b, int $scale = self::CALC_SCALE): string
     {
-        $divisor = self::normalize($b);
+        $divisor = self::normalize($b, self::CALC_SCALE);
         if (bccomp($divisor, '0', self::CALC_SCALE) === 0) {
             throw new \InvalidArgumentException('Division durch 0.');
         }
 
-        return bcdiv(self::normalize($a), $divisor, $scale);
+        return bcdiv(self::normalize($a, self::CALC_SCALE), $divisor, $scale);
     }
 
     /** Vergleich: -1, 0, 1 */

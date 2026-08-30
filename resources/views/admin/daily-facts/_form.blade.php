@@ -4,9 +4,9 @@
         <label class="form-label" for="title">Titel *</label>
         <input type="text" id="title" name="title" class="form-control @error('title') is-invalid @enderror"
                value="{{ old('title', $entry?->title) }}" required maxlength="255"
-               placeholder="z. B. Weltspartag">
+               placeholder="z. B. Welthundetag">
         @error('title')<div class="invalid-feedback">{{ $message }}</div>@enderror
-        <div class="form-text">Der Titel erscheint in der Fußzeile im Satz "Wussten Sie? Heute ist ...".</div>
+        <div class="form-text">Der Titel erscheint in der Fußzeile im Satz "Heute: ...".</div>
     </div>
     <div class="col-12 col-md-4">
         <label class="form-label" for="country">Land</label>

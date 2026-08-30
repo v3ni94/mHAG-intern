@@ -83,6 +83,39 @@ class User extends Authenticatable
         return $this->roles->pluck('name')->intersect(self::INTERNAL_ROLES)->isNotEmpty();
     }
 
+    /** Ist ein Profilbild hinterlegt und noch vorhanden? */
+    public function hasAvatar(): bool
+    {
+        if (! $this->avatar_path) {
+            return false;
+        }
+
+        try {
+            return \Illuminate\Support\Facades\Storage::disk('avatars')->exists($this->avatar_path);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Initialen als schriftlicher Rueckfall, wenn kein Bild hinterlegt ist.
+     * Titel und Zusaetze werden dabei nicht beruecksichtigt.
+     */
+    public function initials(): string
+    {
+        $teile = preg_split('/\s+/', trim((string) $this->name)) ?: [];
+        $teile = array_values(array_filter($teile, fn ($t) => $t !== '' && mb_strlen($t) > 1));
+
+        if ($teile === []) {
+            return mb_strtoupper(mb_substr((string) $this->email, 0, 1));
+        }
+
+        $erste = mb_substr($teile[0], 0, 1);
+        $letzte = count($teile) > 1 ? mb_substr($teile[count($teile) - 1], 0, 1) : '';
+
+        return mb_strtoupper($erste.$letzte);
+    }
+
     /**
      * IDs aller Entities, auf die dieser Benutzer Zugriff hat (eigene Entity + Zuordnungen).
      */

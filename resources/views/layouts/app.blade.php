@@ -157,7 +157,7 @@
                     <i class="bi bi-stars"></i> Changelog
                 </a>
                 <a href="{{ route('admin.daily-facts.index') }}" class="{{ request()->routeIs('admin.daily-facts.*') ? 'active' : '' }}">
-                    <i class="bi bi-lightbulb"></i> Wussten Sie?
+                    <i class="bi bi-calendar-heart"></i> Tagesereignisse
                 </a>
                 <a href="{{ route('help.page', 'datenimport') }}" class="{{ request()->fullUrlIs(route('help.page', 'datenimport')) ? 'active' : '' }}">
                     <i class="bi bi-file-earmark-arrow-up"></i> Datenimport
@@ -215,14 +215,76 @@
 
                 @include('partials.notification-bell')
 
+                {{-- Benutzermenü (Anforderung 30.08.2026): rundes Profilbild als
+                     Auslöser, ohne hinterlegtes Bild das Firmenzeichen. --}}
+                @php($menuUser = auth()->user())
                 <div class="dropdown">
-                    <button class="btn btn-outline-secondary btn-sm dropdown-toggle" data-bs-toggle="dropdown">
-                        <i class="bi bi-person-circle"></i>
-                        <span class="d-none d-md-inline">{{ auth()->user()?->name }}</span>
+                    <button class="avatar-btn" type="button" data-bs-toggle="dropdown" data-bs-display="static"
+                            aria-expanded="false" aria-label="Benutzermenü {{ $menuUser?->name }}"
+                            title="{{ $menuUser?->name }}">
+                        <x-user-avatar :user="$menuUser" :size="34" />
                     </button>
-                    <ul class="dropdown-menu dropdown-menu-end">
-                        <li><a class="dropdown-item" href="{{ route('profile.edit') }}"><i class="bi bi-person me-2"></i>Profil</a></li>
-                        <li><a class="dropdown-item" href="{{ route('two-factor.setup') }}"><i class="bi bi-shield-lock me-2"></i>Zwei-Faktor-Authentifizierung</a></li>
+                    <ul class="dropdown-menu dropdown-menu-end user-menu">
+                        <li>
+                            <div class="user-menu-head">
+                                <x-user-avatar :user="$menuUser" :size="40" />
+                                <div>
+                                    <div class="name">{{ $menuUser?->name }}</div>
+                                    <div class="meta">{{ $menuUser?->email }}</div>
+                                    <div class="meta">{{ $menuUser?->roles->pluck('name')->join(', ') }}</div>
+                                </div>
+                            </div>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item" href="{{ route('profile.edit') }}">
+                                <i class="bi bi-person me-2"></i>Mein Profil
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{{ route('profile.edit') }}#profilbild">
+                                <i class="bi bi-image me-2"></i>Profilbild ändern
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{{ route('two-factor.setup') }}">
+                                <i class="bi bi-shield-lock me-2"></i>Zwei-Faktor-Authentifizierung
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{{ route('notifications.index') }}">
+                                <i class="bi bi-bell me-2"></i>Benachrichtigungen
+                            </a>
+                        </li>
+                        <li>
+                            <form method="POST" action="{{ route('profile.privacy') }}">
+                                @csrf
+                                <button class="dropdown-item">
+                                    <i class="bi {{ $menuUser?->privacy_mode ? 'bi-eye' : 'bi-eye-slash' }} me-2"></i>
+                                    Datenschutzmodus {{ $menuUser?->privacy_mode ? 'ausschalten' : 'einschalten' }}
+                                </button>
+                            </form>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{{ route('help.index') }}">
+                                <i class="bi bi-question-circle me-2"></i>Hilfe und FAQ
+                            </a>
+                        </li>
+                        @can('admin.settings')
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item" href="{{ route('admin.settings.index') }}">
+                                    <i class="bi bi-gear me-2"></i>Einstellungen
+                                </a>
+                            </li>
+                        @endcan
+                        @can('admin.users')
+                            <li>
+                                <a class="dropdown-item" href="{{ route('admin.users.index') }}">
+                                    <i class="bi bi-people me-2"></i>Benutzerverwaltung
+                                </a>
+                            </li>
+                        @endcan
                         <li><hr class="dropdown-divider"></li>
                         <li>
                             <form method="POST" action="{{ route('logout') }}">

@@ -17,14 +17,16 @@ class SftpController extends Controller
 {
     public function index()
     {
-        $config = config('filesystems.disks.sftp');
+        // Leere Angaben sind in der Konfiguration nicht enthalten (siehe
+        // config/filesystems.php), deshalb ausschliesslich mit ?? zugreifen.
+        $config = (array) config('filesystems.disks.sftp', []);
 
         return view('admin.sftp.index', [
             'activeDisk' => config('documents.disk'),
             'configuration' => [
-                'Host' => $config['host'] ?: null,
+                'Host' => $config['host'] ?? null,
                 'Port' => $config['port'] ?? 22,
-                'Benutzername' => $config['username'] ?: null,
+                'Benutzername' => $config['username'] ?? null,
                 'Basisverzeichnis' => $config['root'] ?? null,
                 'Timeout (Sekunden)' => $config['timeout'] ?? null,
                 'Authentifizierung' => ! empty($config['privateKey'])

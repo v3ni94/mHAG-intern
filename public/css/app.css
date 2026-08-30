@@ -222,6 +222,49 @@ body {
     background: transparent;
 }
 
+/* ---------- Profilbild und Benutzermenü ---------- */
+.avatar-circle {
+    border-radius: 50%;
+    object-fit: cover;
+    background: #fff;
+    border: 1px solid var(--mhag-hairline);
+    display: inline-block;
+    flex: 0 0 auto;
+}
+.avatar-circle.avatar-fallback { object-fit: contain; padding: 2px; }
+.avatar-circle.avatar-initials {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: var(--mhag-anthracite);
+    background: var(--mhag-beige);
+    letter-spacing: 0.03em;
+}
+
+/* Der runde Auslöser des Benutzermenüs: nur das Bild, kein Kastenrahmen. */
+.avatar-btn {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    line-height: 1;
+    border-radius: 50%;
+}
+.avatar-btn:hover .avatar-circle,
+.avatar-btn:focus-visible .avatar-circle { border-color: var(--mhag-gold); }
+.avatar-btn:focus-visible { outline: 2px solid var(--mhag-gold); outline-offset: 2px; }
+.avatar-btn::after { display: none; }
+
+.user-menu { min-width: 270px; }
+.user-menu .user-menu-head {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.7rem 1rem 0.6rem;
+}
+.user-menu .user-menu-head .name { font-weight: 700; line-height: 1.2; }
+.user-menu .user-menu-head .meta { font-size: 0.75rem; color: var(--mhag-gray); word-break: break-all; }
+
 /* ---------- Sonstiges ---------- */
 .privacy-hidden { filter: none; }
 .hairline-top { border-top: 1px solid var(--mhag-hairline); }

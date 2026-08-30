@@ -1,17 +1,55 @@
 @extends('layouts.app')
 
-@section('title', 'Wussten Sie? verwalten')
+@section('title', 'Tagesereignisse verwalten')
 
 @section('content')
-    <x-page-header title='Einträge "Wussten Sie?"' label="Administration">
+    <x-page-header title="Tagesereignisse der Fußzeile" label="Administration">
         <a href="{{ route('admin.daily-facts.create') }}" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg"></i> Neuer Eintrag</a>
     </x-page-header>
 
     <div class="alert alert-info small">
-        Die Einträge erscheinen in der Fußzeile, wenn Monat und Tag dem heutigen Datum entsprechen
-        oder das hinterlegte Datum heute ist. Ohne passenden aktiven Eintrag zeigt die Fußzeile nichts an.
+        Je Kalendertag erscheint in der Fußzeile ein Aktionstag, zum Beispiel der Welthundetag, im Satz
+        "Heute: ...". Angezeigt wird nur, was aktiv und gepflegt ist; ohne passenden Eintrag bleibt die Stelle leer.
         Die Quelle ist Pflichtfeld, damit keine unbelegten Angaben erscheinen.
     </div>
+
+    <div class="row g-2 mb-3">
+        <div class="col-6 col-md-3">
+            <x-kpi-card label="Belegte Kalendertage"
+                        :value="$coverage['covered'].' von '.$coverage['total']"
+                        :hint="$coverage['entries'].' aktive, jährlich wiederkehrende Einträge'" />
+        </div>
+        <div class="col-6 col-md-3">
+            <x-kpi-card label="Offene Tage"
+                        :value="(string) ($coverage['total'] - $coverage['covered'])"
+                        :severity="$coverage['total'] - $coverage['covered'] > 0 ? 'warning' : 'success'"
+                        help="Für diese Tage ist noch kein aktiver Eintrag hinterlegt. Die Fußzeile bleibt an diesen Tagen leer; es wird nichts erfunden." />
+        </div>
+        <div class="col-12 col-md-6">
+            <x-kpi-card label="Heute in der Fußzeile"
+                        :value="$heute['event']?->title ?: 'kein Eintrag'"
+                        :hint="$heute['others']->isNotEmpty() ? 'weitere heute: '.$heute['others']->pluck('title')->join(', ') : null" />
+        </div>
+    </div>
+
+    @if ($coverage['gaps'] !== [])
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Offene Tage je Monat</span>
+                <span class="small text-muted">Zum Ergänzen den Tag im Formular als Monat und Tag erfassen.</span>
+            </div>
+            <div class="card-body py-2">
+                <dl class="row mb-0 small">
+                    @foreach ($coverage['gaps'] as $monat => $tage)
+                        <dt class="col-sm-3 col-lg-2">{{ $monatsnamen[$monat] ?? $monat }} ({{ count($tage) }})</dt>
+                        <dd class="col-sm-9 col-lg-10">
+                            {{ collect($tage)->map(fn ($md) => explode('-', $md)[1].'.')->join(' ') }}
+                        </dd>
+                    @endforeach
+                </dl>
+            </div>
+        </div>
+    @endif
 
     <form method="GET" class="mb-3">
         <div class="input-group input-group-sm" style="max-width: 320px;">

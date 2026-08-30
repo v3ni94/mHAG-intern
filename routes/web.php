@@ -49,6 +49,13 @@ Route::middleware(['auth', 'active', 'two-factor'])->group(function () {
     Route::put('/profil/passwort', [ProfileController::class, 'updatePassword'])->name('profile.password');
     Route::post('/profil/datenschutzmodus', [ProfileController::class, 'togglePrivacyMode'])->name('profile.privacy');
 
+    // Profilbild (Anforderung 30.08.2026): Ablage ausserhalb von public/,
+    // Ausgabe nur ueber den berechtigungsgepruefen Controller.
+    Route::post('/profil/bild', [\App\Http\Controllers\AvatarController::class, 'store'])->name('profile.avatar.store');
+    Route::delete('/profil/bild', [\App\Http\Controllers\AvatarController::class, 'destroy'])->name('profile.avatar.destroy');
+    Route::get('/profilbild/{user}', [\App\Http\Controllers\AvatarController::class, 'show'])
+        ->whereNumber('user')->name('profile.avatar.show');
+
     Route::get('/zwei-faktor', [TwoFactorController::class, 'setup'])->name('two-factor.setup');
     Route::post('/zwei-faktor/bestaetigen', [TwoFactorController::class, 'confirm'])->name('two-factor.confirm');
     Route::post('/zwei-faktor/recovery-codes', [TwoFactorController::class, 'regenerateRecoveryCodes'])->name('two-factor.recovery-codes');

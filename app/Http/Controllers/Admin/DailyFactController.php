@@ -11,10 +11,14 @@ use Illuminate\Validation\Validator;
 use Illuminate\View\View;
 
 /**
- * Pflegeoberfläche für den Footer-Hinweis "Wussten Sie?" (Abschnitt 119).
+ * Pflegeoberfläche für die Tagesereignisse in der Fußzeile (Abschnitt 119,
+ * erweitert am 30.08.2026): je Kalendertag ein Aktionstag, zum Beispiel der
+ * Welthundetag.
  *
- * Quelle ist Pflichtfeld (Abschnitt 140: keine erfundenen Angaben). Es werden
- * keine Aktionstage vorbefüllt; ohne gepflegten Eintrag zeigt der Footer nichts.
+ * Quelle ist Pflichtfeld (Abschnitt 140: keine erfundenen Angaben). Ohne
+ * gepflegten, aktiven Eintrag zeigt die Fußzeile an dieser Stelle nichts. Die
+ * Übersicht weist offene Tage aus, damit Lücken sichtbar sind und gezielt
+ * ergänzt werden können.
  */
 class DailyFactController extends Controller
 {
@@ -29,7 +33,7 @@ class DailyFactController extends Controller
         'is_active' => 'Aktiv',
     ];
 
-    public function index(Request $request): View
+    public function index(Request $request, \App\Services\DailyEventService $events): View
     {
         $entries = DailyFact::query()
             ->when($request->filled('monat'), fn ($q) => $q->where('month_day', 'like', $request->query('monat').'-%'))
@@ -41,6 +45,9 @@ class DailyFactController extends Controller
         return view('admin.daily-facts.index', [
             'entries' => $entries,
             'today' => now()->format('m-d'),
+            'coverage' => $events->coverage(),
+            'heute' => $events->forDate(),
+            'monatsnamen' => \App\Services\DailyEventService::monatsnamen(),
         ]);
     }
 

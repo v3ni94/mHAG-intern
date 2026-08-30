@@ -6,9 +6,9 @@ use App\Models\ChangelogEntry;
 use App\Models\DailyFact;
 
 /**
- * Pflegeoberflächen für Changelog (Abschnitt 118) und den Footer-Hinweis
- * "Wussten Sie?" (Abschnitt 119). Es werden keine Beispieldaten erzeugt:
- * ohne gepflegten Eintrag bleibt die Anzeige leer.
+ * Pflegeoberflächen für Changelog (Abschnitt 118) und die Tagesereignisse der
+ * Fußzeile (Abschnitt 119). Es werden keine Beispieldaten erzeugt: ohne
+ * gepflegten Eintrag bleibt die Anzeige leer.
  */
 class AdminContentManagementTest extends OrganisationTestCase
 {
@@ -78,7 +78,7 @@ class AdminContentManagementTest extends OrganisationTestCase
     }
 
     // ------------------------------------------------------------------
-    // "Wussten Sie?"
+    // Tagesereignisse der Fußzeile
     // ------------------------------------------------------------------
 
     public function test_ohne_eintrag_zeigt_der_footer_nichts(): void
@@ -89,7 +89,7 @@ class AdminContentManagementTest extends OrganisationTestCase
 
         $this->actingAs($admin)->get(route('dashboard'))
             ->assertOk()
-            ->assertDontSee('Wussten Sie? Heute ist');
+            ->assertDontSee('Heute:');
     }
 
     public function test_wiederkehrenden_eintrag_anlegen_und_im_footer_sehen(): void
@@ -119,7 +119,7 @@ class AdminContentManagementTest extends OrganisationTestCase
 
         $this->actingAs($admin)->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('Wussten Sie? Heute ist Prüftag Datenschutzmodus.');
+            ->assertSee('Heute: Prüftag Datenschutzmodus');
     }
 
     public function test_einmaligen_eintrag_anlegen_leitet_monat_und_tag_ab(): void

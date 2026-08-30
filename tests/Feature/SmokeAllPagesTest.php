@@ -63,8 +63,13 @@ class SmokeAllPagesTest extends TestCase
             if (! $name || ! in_array('GET', $route->methods(), true)) {
                 continue;
             }
-            // Nicht sinnvoll im Rauchtest: Framework-/Token-Routen
-            if (in_array($name, ['storage.local', 'invitations.show', 'password.reset', 'admin.backups.download'], true)) {
+            // Nicht sinnvoll im Rauchtest: Framework-/Token-Routen sowie
+            // Dateiausgaben, die ohne hinterlegte Datei richtigerweise mit 404
+            // antworten (Profilbild: eigene Tests in ProfileAvatarTest).
+            if (in_array($name, [
+                'storage.local', 'invitations.show', 'password.reset',
+                'admin.backups.download', 'profile.avatar.show',
+            ], true)) {
                 continue;
             }
 

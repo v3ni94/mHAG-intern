@@ -47,6 +47,19 @@ return [
             'report' => false,
         ],
 
+        /*
+         * Profilbilder. Bewusst nicht in public/: die Auslieferung läuft über
+         * einen berechtigungsgeprüften Controller, damit Bilder nicht ohne
+         * Anmeldung abrufbar sind.
+         */
+        'avatars' => [
+            'driver' => 'local',
+            'root' => storage_path('app/avatars'),
+            'serve' => false,
+            'throw' => false,
+            'report' => false,
+        ],
+
         // Dokumentenablage lokal (Fallback bzw. Entwicklungsumgebung).
         // Niemals in public/: Downloads laufen ausschließlich über
         // authentifizierte, berechtigungsgeprüfte Controller (Abschnitt 64).
@@ -58,22 +71,32 @@ return [
             'report' => true,
         ],
 
-        // Bevorzugte Dokumentenablage: SFTP (Abschnitt 59 Masterprompt).
-        // SSH-Key-Authentifizierung bevorzugt, Host-Key-Prüfung über Fingerprint.
-        'sftp' => [
+        /*
+         * Bevorzugte Dokumentenablage: SFTP (Abschnitt 59 Masterprompt).
+         * SSH-Key-Authentifizierung bevorzugt, Host-Key-Prüfung über Fingerprint.
+         *
+         * Leere Werte werden bewusst auf null gesetzt. Ein in der .env
+         * vorhandener, aber leerer SFTP_PRIVATE_KEY ist ein leerer String und
+         * damit nicht "nicht gesetzt": der Adapter versucht dann, diesen leeren
+         * Wert als Schlüssel zu laden, und bricht mit "Unable to load private
+         * key" ab, obwohl eine Anmeldung per Passwort vorgesehen ist.
+         */
+        'sftp' => array_filter([
             'driver' => 'sftp',
             'host' => env('SFTP_HOST'),
-            'port' => (int) env('SFTP_PORT', 22),
+            // Leere Angaben nicht als 0 durchlassen: ein leerer SFTP_PORT
+            // ergaebe Port 0 und damit einen unerklaerlichen Verbindungsfehler.
+            'port' => (int) (env('SFTP_PORT') ?: 22),
             'username' => env('SFTP_USERNAME'),
             'privateKey' => env('SFTP_PRIVATE_KEY'),
             'passphrase' => env('SFTP_PASSPHRASE'),
             'password' => env('SFTP_PASSWORD'),
             'root' => env('SFTP_ROOT_PATH', '/mueller-holding'),
-            'timeout' => (int) env('SFTP_TIMEOUT', 15),
+            'timeout' => (int) (env('SFTP_TIMEOUT') ?: 15),
             'hostFingerprint' => env('SFTP_HOST_FINGERPRINT'),
             'throw' => true,
             'report' => true,
-        ],
+        ], fn ($value) => $value !== null && $value !== ''),
 
         's3' => [
             'driver' => 's3',

@@ -4,6 +4,40 @@
     <x-page-header title="Mein Profil" label="Konto" />
     <div class="row g-3">
         <div class="col-lg-6">
+            {{-- Profilbild (Anforderung 30.08.2026) --}}
+            <div class="card mb-3" id="profilbild">
+                <div class="card-header">Profilbild</div>
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <x-user-avatar :user="$user" :size="72" />
+                        <div class="small text-muted">
+                            Das Bild erscheint im Benutzermenü oben rechts.
+                            Ohne hinterlegtes Bild wird das Firmenzeichen der Müller Holding AG angezeigt.<br>
+                            Zulässig sind JPG, PNG und WebP bis 2 MB.
+                        </div>
+                    </div>
+                    <form method="POST" action="{{ route('profile.avatar.store') }}" enctype="multipart/form-data" class="mb-2">
+                        @csrf
+                        <div class="mb-2">
+                            <label class="form-label" for="avatar">Bilddatei auswählen</label>
+                            <input type="file" name="avatar" id="avatar" accept="image/jpeg,image/png,image/webp"
+                                   class="form-control @error('avatar') is-invalid @enderror" required>
+                            @error('avatar')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                        <button class="btn btn-primary btn-sm"><i class="bi bi-upload"></i> Bild speichern</button>
+                    </form>
+                    @if ($user->hasAvatar())
+                        <x-confirm-form :action="route('profile.avatar.destroy')" method="DELETE"
+                                        confirm="Profilbild wirklich entfernen? Danach erscheint wieder das Firmenzeichen."
+                                        label="Bild entfernen" icon="bi-trash"
+                                        class="btn btn-sm btn-outline-danger" />
+                    @endif
+                    <div class="form-text mt-2">
+                        Die Datei wird außerhalb des öffentlichen Verzeichnisses gespeichert und nur nach Anmeldung
+                        ausgeliefert.
+                    </div>
+                </div>
+            </div>
             <div class="card mb-3">
                 <div class="card-header">Stammdaten</div>
                 <div class="card-body">

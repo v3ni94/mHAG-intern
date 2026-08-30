@@ -1,9 +1,9 @@
 @extends('layouts.app')
 
-@section('title', 'Neuer Eintrag Wussten Sie?')
+@section('title', 'Neues Tagesereignis')
 
 @section('content')
-    <x-page-header title='Neuer Eintrag "Wussten Sie?"' label="Administration">
+    <x-page-header title="Neues Tagesereignis" label="Administration">
         <a href="{{ route('admin.daily-facts.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Zurück</a>
     </x-page-header>
 

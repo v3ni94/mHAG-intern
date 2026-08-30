@@ -1,0 +1,23 @@
+@extends('layouts.app')
+
+@section('title', 'FAQ-Eintrag bearbeiten')
+
+@section('content')
+    <x-page-header title="FAQ-Eintrag bearbeiten" label="Administration">
+        <a href="{{ route('admin.faq.index') }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Zurück</a>
+    </x-page-header>
+
+    <div class="card">
+        <div class="card-body">
+            <form method="POST" action="{{ route('admin.faq.update', $entry) }}">
+                @csrf
+                @method('PUT')
+                @include('admin.faq._form')
+                <div class="mt-4 d-flex gap-2">
+                    <button class="btn btn-primary">Speichern</button>
+                    <a href="{{ route('admin.faq.index') }}" class="btn btn-outline-secondary">Abbrechen</a>
+                </div>
+            </form>
+        </div>
+    </div>
+@endsection

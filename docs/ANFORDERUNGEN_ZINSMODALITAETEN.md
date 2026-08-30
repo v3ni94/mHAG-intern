@@ -31,6 +31,25 @@ sich nach dieser Einstellung. Die Zinsperiode selbst bleibt taggenau, es
 verschiebt sich nur der Fälligkeitstag. Bestehende Darlehen behalten durch den
 Standardwert ihr bisheriges Verhalten.
 
+**Umgesetzt am 30.08.2026.** Präzisierung gegenüber dem Entwurf, weil sonst
+offen bliebe, welcher Zeitraum zu welcher Fälligkeit gehört:
+
+- Die Periode endet am Fälligkeitstag **einschließlich**, die nächste beginnt
+  am Folgetag. Perioden sind dadurch lückenlos und überschneidungsfrei. Das
+  entspricht dem bisherigen Verhalten, bei dem die Fälligkeit einen Tag vor
+  dem gleichen Tag der Folgeperiode liegt.
+- Erster Fälligkeitstag ist der erste des Rasters, der nicht vor dem
+  Wirkungsbeginn liegt. Die erste Periode kann dadurch kürzer oder länger als
+  die Folgeperioden sein (Stummelperiode); sie wird taggenau gerechnet.
+- Eine unvollständige Vorgabe (Modus `fixed_day` ohne Tag oder mit einem Tag
+  außerhalb 1 bis 28) wird nicht geraten: es bleibt beim Standardverhalten.
+- Tilgungsraten bei Ratentilgung und Annuität folgen demselben Raster, damit
+  Zins und Tilgung einer Periode am gleichen Tag fällig werden. Endfällige
+  Tilgung bleibt am Vertragsende.
+
+Belegt durch `tests/Feature/Loans/EngineInterestDueDayTest.php` (9 Tests) und
+drei Formulartests in `tests/Feature/Loans/UiLoanCrudTest.php`.
+
 ## 2. Zinskapitalisierung
 
 Neues Feld `loans.interest_capitalization` (boolean, Standard false).

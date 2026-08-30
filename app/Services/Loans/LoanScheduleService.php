@@ -2,6 +2,7 @@
 
 namespace App\Services\Loans;
 
+use App\Enums\InterestDueDayMode;
 use App\Enums\InterestFrequency;
 use App\Enums\PaymentOrigin;
 use App\Enums\RepaymentItemStatus;
@@ -94,16 +95,23 @@ class LoanScheduleService
             : today()->addMonthsNoOverflow(12);
         $limitExcl = $horizon->copy()->addDay();
 
-        for ($k = 0; $k < 1200; $k++) {
-            $pStart = $start->copy()->addMonthsNoOverflow($months * $k);
+        // Die Periode endet am Faelligkeitstag einschliesslich, die naechste
+        // beginnt am Folgetag. Das Raster der Faelligkeiten richtet sich nach
+        // interest_due_day_mode; die Berechnung bleibt taggenau.
+        $pStart = $start->copy();
+        foreach ($this->dueDateGrid($loan, $months, $start) as $gridDue) {
             if ($pStart->gte($limitExcl)) {
                 break;
             }
-            $pEnd = $start->copy()->addMonthsNoOverflow($months * ($k + 1));
+            $due = $gridDue->copy();
+            $pEnd = $due->copy()->addDay();
             if ($hardEnd && $pEnd->gt($limitExcl)) {
                 $pEnd = $limitExcl->copy(); // Stummelperiode bis Vertragsende
+                $due = $horizon->copy();
             }
-            $due = $pEnd->copy()->subDay();
+            if ($pEnd->lte($pStart)) {
+                continue; // Faelligkeit liegt vor dem Periodenbeginn
+            }
             if (! $hardEnd && $due->gt($horizon)) {
                 break; // rollierender Horizont: nur vollstaendige Perioden
             }
@@ -112,9 +120,63 @@ class LoanScheduleService
             if (Money::isPositive($amount)) {
                 $targets[] = [RepaymentItemType::Interest, $due->toDateString(), $amount];
             }
+            $pStart = $pEnd->copy();
         }
 
         return $targets;
+    }
+
+    /**
+     * Faelligkeitstage der Zinsperioden im eingestellten Raster, aufsteigend.
+     *
+     * effective_from: bisheriges Verhalten, Raster aus dem Wirkungsbeginn.
+     * fixed_day:      fester Tag im Monat (1 bis 28).
+     * month_end:      letzter Tag des Monats.
+     *
+     * Der erste Faelligkeitstag ist der erste des Rasters, der nicht vor dem
+     * Wirkungsbeginn liegt; die erste Periode kann dadurch kuerzer oder
+     * laenger als die Folgeperioden sein (Stummelperiode). Das ist gewollt:
+     * die Zinsen werden taggenau gerechnet, nur der Faelligkeitstag ist
+     * vorgegeben.
+     *
+     * @return \Generator<int, Carbon>
+     */
+    protected function dueDateGrid(Loan $loan, int $months, Carbon $start): \Generator
+    {
+        $mode = $loan->interest_due_day_mode ?? InterestDueDayMode::EffectiveFrom;
+        $fixedDay = (int) ($loan->interest_due_day ?? 0);
+
+        // Fester Tag ohne erfassten Tag: kein Raten, es bleibt beim Standard.
+        if ($mode === InterestDueDayMode::FixedDay
+            && ($fixedDay < InterestDueDayMode::FIXED_DAY_MIN || $fixedDay > InterestDueDayMode::FIXED_DAY_MAX)) {
+            $mode = InterestDueDayMode::EffectiveFrom;
+        }
+
+        $first = match ($mode) {
+            InterestDueDayMode::MonthEnd => $start->copy()->endOfMonth()->startOfDay(),
+            InterestDueDayMode::FixedDay => $this->firstFixedDayDue($start, $fixedDay, $months),
+            InterestDueDayMode::EffectiveFrom => $start->copy()->addMonthsNoOverflow($months)->subDay(),
+        };
+
+        for ($k = 0; $k < 1200; $k++) {
+            yield $mode === InterestDueDayMode::MonthEnd
+                ? $first->copy()->startOfMonth()->addMonthsNoOverflow($months * $k)->endOfMonth()->startOfDay()
+                : $first->copy()->addMonthsNoOverflow($months * $k);
+        }
+    }
+
+    /**
+     * Erster fester Faelligkeitstag ab dem Wirkungsbeginn. Liegt der Tag im
+     * Monat des Wirkungsbeginns bereits davor, wird eine Periode weitergerueckt.
+     */
+    protected function firstFixedDayDue(Carbon $start, int $day, int $months): Carbon
+    {
+        $first = $start->copy()->startOfDay()->day($day);
+        if ($first->lt($start)) {
+            $first = $first->addMonthsNoOverflow($months);
+        }
+
+        return $first;
     }
 
     /** @return array<int, array{0: RepaymentItemType, 1: string, 2: string}> */
@@ -312,16 +374,25 @@ class LoanScheduleService
         $start = Carbon::parse($loan->effective_from->toDateString());
         $limitExcl = $hardEnd->copy()->addDay();
         $dates = [];
-        for ($k = 0; $k < 1200; $k++) {
-            $pStart = $start->copy()->addMonthsNoOverflow($months * $k);
+
+        // Tilgungsraten folgen demselben Faelligkeitsraster wie die Zinsen,
+        // damit Zins und Tilgung einer Periode am gleichen Tag faellig werden.
+        $pStart = $start->copy();
+        foreach ($this->dueDateGrid($loan, $months, $start) as $gridDue) {
             if ($pStart->gte($limitExcl)) {
                 break;
             }
-            $pEnd = $start->copy()->addMonthsNoOverflow($months * ($k + 1));
+            $due = $gridDue->copy();
+            $pEnd = $due->copy()->addDay();
             if ($pEnd->gt($limitExcl)) {
                 $pEnd = $limitExcl->copy();
+                $due = $hardEnd->copy();
             }
-            $dates[] = $pEnd->copy()->subDay()->toDateString();
+            if ($pEnd->lte($pStart)) {
+                continue;
+            }
+            $dates[] = $due->toDateString();
+            $pStart = $pEnd->copy();
         }
 
         return $dates;

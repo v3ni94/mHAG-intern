@@ -32,6 +32,9 @@ class Loan extends Model
             'default_interest_method' => \App\Enums\InterestMethod::class,
             'interest_method' => \App\Enums\InterestMethod::class,
             'interest_frequency' => \App\Enums\InterestFrequency::class,
+            // Fälligkeitstag der Zinsperioden; Standard = bisheriges Verhalten
+            'interest_due_day_mode' => \App\Enums\InterestDueDayMode::class,
+            'interest_due_day' => 'integer',
             'repayment_model' => \App\Enums\RepaymentModel::class,
             'status' => \App\Enums\LoanStatus::class,
             'risk_rating' => \App\Enums\RiskRating::class,

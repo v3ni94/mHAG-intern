@@ -162,6 +162,36 @@
                 @error('interest_frequency')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
             <div class="col-md-4">
+                <label class="form-label" for="interest_due_day_mode">
+                    Fälligkeitstag der Zinsen
+                    <x-help-icon text="Die Zinsperiode endet am Fälligkeitstag einschließlich, die nächste beginnt am Folgetag. Die Zinsen bleiben taggenau gerechnet; die erste Periode kann dadurch kürzer oder länger als die Folgeperioden sein." />
+                </label>
+                <select id="interest_due_day_mode" name="interest_due_day_mode"
+                        class="form-select @error('interest_due_day_mode') is-invalid @enderror">
+                    @foreach (\App\Enums\InterestDueDayMode::cases() as $mode)
+                        <option value="{{ $mode->value }}"
+                            @selected(old('interest_due_day_mode', $loan->interest_due_day_mode?->value ?? \App\Enums\InterestDueDayMode::EffectiveFrom->value) === $mode->value)>
+                            {{ $mode->label() }}
+                        </option>
+                    @endforeach
+                </select>
+                @error('interest_due_day_mode')<div class="invalid-feedback">{{ $message }}</div>@enderror
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="interest_due_day">Fester Fälligkeitstag (1 bis 28)</label>
+                <input type="number" min="{{ \App\Enums\InterestDueDayMode::FIXED_DAY_MIN }}"
+                       max="{{ \App\Enums\InterestDueDayMode::FIXED_DAY_MAX }}" step="1"
+                       id="interest_due_day" name="interest_due_day"
+                       class="form-control @error('interest_due_day') is-invalid @enderror"
+                       value="{{ old('interest_due_day', $loan->interest_due_day) }}"
+                       placeholder="nur bei festem Tag im Monat">
+                <div class="form-text">
+                    Der 29., 30. und 31. sind nicht zulässig, weil sie nicht in jedem Monat existieren.
+                    Für den Monatsletzten ist die Einstellung "Letzter Tag des Monats" zu wählen.
+                </div>
+                @error('interest_due_day')<div class="invalid-feedback">{{ $message }}</div>@enderror
+            </div>
+            <div class="col-md-4">
                 <label class="form-label" for="repayment_model">Tilgungsmodell *</label>
                 <select id="repayment_model" name="repayment_model" class="form-select @error('repayment_model') is-invalid @enderror" required>
                     @foreach (\App\Enums\RepaymentModel::cases() as $model)

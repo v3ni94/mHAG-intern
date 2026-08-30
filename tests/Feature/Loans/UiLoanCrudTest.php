@@ -92,6 +92,83 @@ class UiLoanCrudTest extends LoansUiTestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'loans.created']);
     }
 
+    public function test_store_speichert_festen_faelligkeitstag(): void
+    {
+        $mocks = $this->mockLoanServices();
+        $mocks['schedule']->shouldReceive('generate')->once();
+
+        $user = $this->makeInternalUser();
+        $lender = $this->makeEntity('Müller Holding AG');
+        $borrower = $this->makeEntity('Beispiel GmbH');
+
+        $this->actingAs($user)->post(route('loans.store'), [
+            'title' => 'Darlehen mit festem Zinstermin',
+            'lender_entity_id' => $lender->id,
+            'borrower_entity_id' => $borrower->id,
+            'effective_from' => now()->addDay()->toDateString(),
+            'principal_amount' => '100.000,00',
+            'interest_rate' => '4,5',
+            'interest_method' => 'act_365',
+            'interest_frequency' => 'monthly',
+            'repayment_model' => 'bullet',
+            'interest_due_day_mode' => 'fixed_day',
+            'interest_due_day' => '15',
+        ]);
+
+        $loan = Loan::where('title', 'Darlehen mit festem Zinstermin')->firstOrFail();
+        $this->assertSame(\App\Enums\InterestDueDayMode::FixedDay, $loan->interest_due_day_mode);
+        $this->assertSame(15, $loan->interest_due_day);
+    }
+
+    public function test_store_lehnt_unzulaessigen_faelligkeitstag_ab(): void
+    {
+        // Der 31. existiert nicht in jedem Monat und ist deshalb nicht zulässig.
+        $this->mockLoanServices();
+        $user = $this->makeInternalUser();
+        $lender = $this->makeEntity('Müller Holding AG');
+        $borrower = $this->makeEntity('Beispiel GmbH');
+
+        $response = $this->actingAs($user)->post(route('loans.store'), [
+            'title' => 'Unzulässiger Zinstermin',
+            'lender_entity_id' => $lender->id,
+            'borrower_entity_id' => $borrower->id,
+            'effective_from' => now()->addDay()->toDateString(),
+            'principal_amount' => '100.000,00',
+            'interest_rate' => '4,5',
+            'interest_method' => 'act_365',
+            'interest_frequency' => 'monthly',
+            'repayment_model' => 'bullet',
+            'interest_due_day_mode' => 'fixed_day',
+            'interest_due_day' => '31',
+        ]);
+
+        $response->assertSessionHasErrors('interest_due_day');
+        $this->assertDatabaseMissing('loans', ['title' => 'Unzulässiger Zinstermin']);
+    }
+
+    public function test_store_verlangt_tag_bei_festem_faelligkeitstag(): void
+    {
+        $this->mockLoanServices();
+        $user = $this->makeInternalUser();
+        $lender = $this->makeEntity('Müller Holding AG');
+        $borrower = $this->makeEntity('Beispiel GmbH');
+
+        $response = $this->actingAs($user)->post(route('loans.store'), [
+            'title' => 'Fester Tag ohne Tag',
+            'lender_entity_id' => $lender->id,
+            'borrower_entity_id' => $borrower->id,
+            'effective_from' => now()->addDay()->toDateString(),
+            'principal_amount' => '100.000,00',
+            'interest_rate' => '4,5',
+            'interest_method' => 'act_365',
+            'interest_frequency' => 'monthly',
+            'repayment_model' => 'bullet',
+            'interest_due_day_mode' => 'fixed_day',
+        ]);
+
+        $response->assertSessionHasErrors('interest_due_day');
+    }
+
     public function test_store_rueckwirkend_loest_neuberechnung_aus(): void
     {
         $mocks = $this->mockLoanServices();

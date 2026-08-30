@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\InterestDueDayMode;
 use App\Enums\LoanStatus;
 use App\Http\Requests\Loans\StoreLoanRequest;
 use App\Http\Requests\Loans\TransitionLoanRequest;
@@ -163,6 +164,10 @@ class LoanController extends Controller
                 'currency' => strtoupper($data['currency'] ?? 'EUR'),
                 'interest_method' => $data['interest_method'],
                 'interest_frequency' => $data['interest_frequency'],
+                'interest_due_day_mode' => ($data['interest_due_day_mode'] ?? null) ?: InterestDueDayMode::EffectiveFrom->value,
+                'interest_due_day' => ($data['interest_due_day_mode'] ?? null) === InterestDueDayMode::FixedDay->value
+                    ? ($data['interest_due_day'] ?? null)
+                    : null,
                 'repayment_model' => $data['repayment_model'],
                 'default_interest_enabled' => (bool) ($data['default_interest_enabled'] ?? false),
                 'default_interest_rate' => $data['default_interest_rate'] ?? null,
@@ -368,7 +373,8 @@ class LoanController extends Controller
 
         // Pflichtfelder mit Vorgabewert nie auf null setzen (Spalten sind NOT NULL)
         foreach (['default_interest_basis' => DefaultInterestService::BASIS_OVERDUE_TOTAL,
-            'default_interest_mode' => DefaultInterestService::MODE_MANUAL] as $field => $fallback) {
+            'default_interest_mode' => DefaultInterestService::MODE_MANUAL,
+            'interest_due_day_mode' => InterestDueDayMode::EffectiveFrom->value] as $field => $fallback) {
             if (array_key_exists($field, $data) && ! $data[$field]) {
                 $data[$field] = $fallback;
             }
@@ -377,6 +383,7 @@ class LoanController extends Controller
         $financeFields = [
             'principal_amount', 'credit_limit', 'effective_from', 'due_date', 'contract_end',
             'term_months', 'interest_method', 'interest_frequency', 'repayment_model',
+            'interest_due_day_mode', 'interest_due_day',
             'default_interest_enabled', 'default_interest_rate', 'default_interest_start',
             'default_interest_basis', 'default_interest_method', 'default_interest_mode',
             'disbursement_date',

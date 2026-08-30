@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Loans;
 
+use App\Enums\InterestDueDayMode;
 use App\Enums\InterestFrequency;
 use App\Enums\InterestMethod;
 use App\Enums\RepaymentModel;
@@ -42,6 +43,13 @@ class UpdateLoanRequest extends LoansFormRequest
             'currency' => ['nullable', 'string', 'size:3'],
             'interest_method' => ['required', Rule::enum(InterestMethod::class)],
             'interest_frequency' => ['required', Rule::enum(InterestFrequency::class)],
+            'interest_due_day_mode' => ['nullable', Rule::enum(InterestDueDayMode::class)],
+            'interest_due_day' => [
+                'nullable',
+                'integer',
+                'between:'.InterestDueDayMode::FIXED_DAY_MIN.','.InterestDueDayMode::FIXED_DAY_MAX,
+                Rule::requiredIf(fn () => $this->input('interest_due_day_mode') === InterestDueDayMode::FixedDay->value),
+            ],
             'repayment_model' => ['required', Rule::enum(RepaymentModel::class)],
             // Verzugszinsen (Abschnitt 44): nur fachliche Vorgaben, keine Vorbelegung
             'default_interest_enabled' => ['nullable', 'boolean'],

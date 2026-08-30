@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Loans;
 
+use App\Enums\InterestDueDayMode;
 use App\Enums\InterestFrequency;
 use App\Enums\InterestMethod;
 use App\Enums\PaymentOrigin;
@@ -79,6 +80,13 @@ class StoreLoanRequest extends LoansFormRequest
             'currency' => ['nullable', 'string', 'size:3'],
             'interest_method' => ['required', Rule::enum(InterestMethod::class)],
             'interest_frequency' => ['required', Rule::enum(InterestFrequency::class)],
+            'interest_due_day_mode' => ['nullable', Rule::enum(InterestDueDayMode::class)],
+            'interest_due_day' => [
+                'nullable',
+                'integer',
+                'between:'.InterestDueDayMode::FIXED_DAY_MIN.','.InterestDueDayMode::FIXED_DAY_MAX,
+                Rule::requiredIf(fn () => $this->input('interest_due_day_mode') === InterestDueDayMode::FixedDay->value),
+            ],
             'repayment_model' => ['required', Rule::enum(RepaymentModel::class)],
             'interest_rate' => ['required', 'numeric', 'gte:0', 'max:100'],
             // Verzugszinsen (Abschnitt 44): ausschliesslich fachliche Vorgaben,
@@ -164,6 +172,8 @@ class StoreLoanRequest extends LoansFormRequest
             'currency' => 'Währung',
             'interest_method' => 'Zinsmethode',
             'interest_frequency' => 'Zinsfälligkeit',
+            'interest_due_day_mode' => 'Fälligkeitstag der Zinsen',
+            'interest_due_day' => 'Fester Fälligkeitstag',
             'repayment_model' => 'Tilgungsmodell',
             'interest_rate' => 'Zinssatz',
             'default_interest_enabled' => 'Verzugszinsen aktiv',

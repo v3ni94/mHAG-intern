@@ -21,6 +21,17 @@
                     <dt class="col-5">Währung</dt><dd class="col-7">{{ $loan->currency }}</dd>
                     <dt class="col-5">Zinsmethode</dt><dd class="col-7">{{ $loan->interest_method?->label() }}</dd>
                     <dt class="col-5">Zinsfälligkeit</dt><dd class="col-7">{{ $loan->interest_frequency?->label() }}</dd>
+                    <dt class="col-5">
+                        Fälligkeitstag
+                        <x-help-icon text="Die Zinsperiode endet am Fälligkeitstag einschließlich, die nächste beginnt am Folgetag. Die Zinsen bleiben taggenau gerechnet." />
+                    </dt>
+                    <dd class="col-7">
+                        @php($dueMode = $loan->interest_due_day_mode ?? \App\Enums\InterestDueDayMode::EffectiveFrom)
+                        {{ $dueMode->label() }}
+                        @if ($dueMode === \App\Enums\InterestDueDayMode::FixedDay && $loan->interest_due_day)
+                            ({{ $loan->interest_due_day }}. des Monats)
+                        @endif
+                    </dd>
                     <dt class="col-5">Tilgungsmodell</dt><dd class="col-7">{{ $loan->repayment_model?->label() }}</dd>
                     <dt class="col-5">Verzugszinsen</dt>
                     <dd class="col-7">

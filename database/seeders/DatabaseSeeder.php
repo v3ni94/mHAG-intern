@@ -8,6 +8,7 @@ class DatabaseSeeder extends Seeder
 {
     /**
      * Reihenfolge ist verbindlich: Rollen/Rechte -> Initialdaten -> Inhalte.
+     * Die Tagesereignisse stehen zuletzt, sie haengen von nichts ab.
      */
     public function run(): void
     {
@@ -15,6 +16,7 @@ class DatabaseSeeder extends Seeder
             RolePermissionSeeder::class,
             InitialDataSeeder::class,
             ContentSeeder::class,
+            DailyFactSeeder::class,
         ]);
     }
 }

@@ -231,6 +231,19 @@ Häufigste Ursache: Reste eines mehrzeiligen Wertes, etwa
 Schlüssels von Hand. Solche Zeilen haben kein Gleichheitszeichen und sind
 weder Einstellung noch Kommentar.
 
+Zweite häufige Ursache: **`APP_KEY` fehlt in der `.env`.** `config/app.php`
+liest den Schlüssel über `env('APP_KEY')`; solange die Konfiguration
+zwischengespeichert ist, stammt der Wert aus dem Zwischenspeicher. Fällt
+dieser weg, wirft `Illuminate\Encryption` eine `MissingAppKeyException`. Weil
+die Sitzung verschlüsselt geführt wird, scheitert dann auch die Fehlerseite,
+und es bleibt ein Serverfehler 500 ohne Inhalt. Im Aufrufstapel erkennbar an
+`SessionManager::buildEncryptedSession()`.
+
+Ein neuer Schlüssel macht die mit dem alten Schlüssel verschlüsselten Felder
+unlesbar. In dieser Anwendung sind das ausschließlich die Geheimnisse der
+Zwei-Faktor-Anmeldung; sie sind danach je Benutzer zurückzusetzen. Fachdaten,
+Beträge und Dokumente liegen unverschlüsselt und sind nicht betroffen.
+
 ## 7. Überwachung
 
 - Admin-Bereich: Systemstatus (DB, Queue, Backups, SFTP, fehlgeschlagene Logins,

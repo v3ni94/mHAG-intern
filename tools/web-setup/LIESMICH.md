@@ -109,3 +109,42 @@ Gleichheitszeichen und sind damit weder Einstellung noch Kommentar.
 Die geprüften Regeln liegen in `app/Support/EnvFileInspector.php` und werden in
 `tests/Unit/EnvFileInspectorTest.php` gegen den tatsächlich verwendeten Parser
 abgeglichen.
+
+### Gezielte Proben und Pflichtangaben
+
+Eine syntaktisch fehlerfreie `.env` kann trotzdem jede Seite lahmlegen.
+`notfall.php` prüft deshalb zusätzlich:
+
+- **Pflichtangaben.** Ist `APP_KEY` vorhanden und hat der Schlüssel die für
+  AES-256-CBC erforderliche Länge von 32 Byte? Sind `APP_ENV`, `APP_URL` und
+  `DB_CONNECTION` gesetzt? Ist die PHP-Erweiterung `openssl` geladen? Der Wert
+  des Schlüssels wird dabei nie angezeigt.
+- **Laufzeitproben.** Verschlüsseler, Sitzungsspeicher, Datenbankverbindung und
+  Schreibrecht in `storage/framework` werden einzeln versucht; eine Ausnahme
+  wird im Klartext genannt.
+- **Rückweg.** Fehlt `APP_KEY` vollständig, lässt sich ein neuer Schlüssel
+  erzeugen. Ein vorhandener Schlüssel wird nie überschrieben, vor der Änderung
+  entsteht eine Sicherung der `.env`. Folge eines Wechsels: mit dem alten
+  Schlüssel verschlüsselte Felder sind unlesbar, betroffen sind die Geheimnisse
+  der Zwei-Faktor-Anmeldung.
+
+### Warum ein fehlender `APP_KEY` erst nach dem Leeren des Zwischenspeichers auffällt
+
+`config/app.php` liest den Schlüssel über `env('APP_KEY')`. Solange
+`bootstrap/cache/config.php` vorhanden ist, stammt der Wert aus dieser Datei
+und die `.env` wird nicht gelesen. Mit dem Leeren des Zwischenspeichers fällt
+diese Quelle weg. Ohne Schlüssel wirft `Illuminate\Encryption` eine
+`MissingAppKeyException`, und weil die Sitzung verschlüsselt geführt wird,
+scheitert schon die Fehlerseite: das Ergebnis ist ein Serverfehler 500 ohne
+Inhalt.
+
+Im Aufrufstapel erkennbar an
+`SessionManager::buildEncryptedSession()` und dem folgenden Zugriff auf
+`encrypter`.
+
+### Auszug aus dem Anwendungsprotokoll
+
+`notfall.php` zeigt den letzten **vollständigen** Eintrag ab seinem
+Zeitstempel, nicht die letzten Zeilen der Datei. Die Ursache steht in der
+ersten Zeile eines Eintrags; ein Auszug vom Dateiende zeigt nur das Ende des
+Aufrufstapels.

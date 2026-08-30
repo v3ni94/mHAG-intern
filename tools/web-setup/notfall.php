@@ -122,6 +122,57 @@ if ($action === 'delete') {
 }
 
 // ---------------------------------------------------------------------------
+// Anwendungsschlüssel erzeugen
+// ---------------------------------------------------------------------------
+/*
+ * Nur zulaessig, wenn KEIN Schluessel hinterlegt ist. Ein vorhandener
+ * Schluessel wird nie ueberschrieben: mit ihm sind verschluesselte Felder
+ * gespeichert, ein Austausch macht sie unlesbar. Dieselbe Regel gilt im
+ * Einrichtungswerkzeug.
+ */
+if ($action === 'app-key') {
+    $inhalt = is_readable($envPath) ? (string) file_get_contents($envPath) : null;
+
+    if ($inhalt === null) {
+        $meldungen[] = ['fehler', 'Die Datei .env ist nicht lesbar. Es wurde nichts geändert.'];
+    } elseif (preg_match('/^[ \t]*APP_KEY[ \t]*=[ \t]*(\S+)/m', $inhalt) === 1) {
+        $meldungen[] = ['warnung', 'Es ist bereits ein Anwendungsschlüssel hinterlegt. '
+            .'Er wird nicht überschrieben, weil damit verschlüsselte Felder gespeichert sind. '
+            .'Liegt der Fehler an der Länge des Schlüssels, ist der Eintrag von Hand zu '
+            .'berichtigen.'];
+    } elseif (! is_writable($envPath)) {
+        $meldungen[] = ['fehler', 'Die Datei .env ist nicht beschreibbar. Bitte die Rechte im '
+            .'Dateimanager prüfen.'];
+    } else {
+        $neuerSchluessel = 'base64:'.base64_encode(random_bytes(32));
+
+        // Sicherung vor der Änderung, damit der vorherige Stand nachvollziehbar bleibt.
+        @copy($envPath, $envPath.'.vor-schluessel-'.date('Ymd-His'));
+
+        if (preg_match('/^[ \t]*APP_KEY[ \t]*=.*$/m', $inhalt) === 1) {
+            $geaendert = preg_replace('/^[ \t]*APP_KEY[ \t]*=.*$/m', 'APP_KEY='.$neuerSchluessel, $inhalt, 1);
+        } else {
+            $geaendert = rtrim($inhalt, "\r\n")."\nAPP_KEY=".$neuerSchluessel."\n";
+        }
+
+        if (@file_put_contents($envPath, $geaendert) === false) {
+            $meldungen[] = ['fehler', 'Das Schreiben in die .env ist fehlgeschlagen. Es wurde '
+                .'nichts geändert.'];
+        } else {
+            $meldungen[] = ['ok', 'Ein neuer Anwendungsschlüssel wurde in der .env hinterlegt. '
+                .'Der Wert wird nicht angezeigt. Eine Sicherung der vorherigen Datei liegt im '
+                .'Wurzelverzeichnis. Bitte diese Seite neu laden und danach die Anwendung '
+                .'aufrufen.'];
+            $meldungen[] = ['warnung', 'Folge: Mit dem alten Schlüssel verschlüsselte Felder sind '
+                .'nicht mehr lesbar. Betroffen sind die Geheimnisse der Zwei-Faktor-Anmeldung. '
+                .'Für Benutzer mit aktiver Zwei-Faktor-Anmeldung ist diese in der '
+                .'Benutzerverwaltung zurückzusetzen. Fachdaten, Beträge und Dokumente sind '
+                .'nicht betroffen.'];
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Prüfung der Konfigurationsdatei, ohne das Framework zu laden
 // ---------------------------------------------------------------------------
 $inspektor = $basePath.'/app/Support/EnvFileInspector.php';
@@ -227,6 +278,52 @@ if ($envFehler !== []) {
 }
 
 // ---------------------------------------------------------------------------
+// Pflichtangaben und gezielte Laufzeitproben
+// ---------------------------------------------------------------------------
+/*
+ * Eine syntaktisch fehlerfreie .env kann trotzdem jede Seite lahmlegen. Der
+ * haeufigste Fall: der Anwendungsschluessel APP_KEY fehlt. Die Anwendung
+ * startet dann, aber jede Anfrage bricht ab, weil der Verschluesseler nicht
+ * erzeugt werden kann. Deshalb wird hier gezielt geprobt, was eine Anfrage
+ * braucht.
+ */
+$pflichtBefunde = [];
+if (! $inspektorFehlt) {
+    $pflichtBefunde = App\Support\EnvFileInspector::pflichtangabenFile($envPath);
+}
+
+$proben = [];
+if ($app !== null) {
+    $probe = function (string $name, string $erklaerung, callable $fn) use (&$proben) {
+        try {
+            $fn();
+            $proben[] = [$name, 'ok', 'in Ordnung', $erklaerung];
+        } catch (Throwable $e) {
+            $proben[] = [$name, 'fehler', get_class($e).': '.$e->getMessage(), $erklaerung];
+        }
+    };
+
+    $probe('Verschlüsseler', 'Wird für Sitzungen und verschlüsselte Felder benötigt. '
+        .'Scheitert er, endet jede Seite mit einem Serverfehler 500.',
+        fn () => app('encrypter'));
+
+    $probe('Sitzungsspeicher', 'Ohne Sitzung ist keine Anmeldung möglich.',
+        fn () => app('session.store'));
+
+    $probe('Datenbankverbindung', 'Zugangsdaten und Erreichbarkeit der Datenbank.',
+        fn () => Illuminate\Support\Facades\DB::connection()->getPdo());
+
+    $probe('Schreibrecht storage', 'Protokolle, Sitzungen und vorkompilierte Oberflächen.',
+        function () use ($basePath) {
+            $datei = $basePath.'/storage/framework/schreibprobe.tmp';
+            if (@file_put_contents($datei, 'probe') === false) {
+                throw new RuntimeException('In storage/framework kann nicht geschrieben werden.');
+            }
+            @unlink($datei);
+        });
+}
+
+// ---------------------------------------------------------------------------
 // Konfiguration wieder zwischenspeichern
 // ---------------------------------------------------------------------------
 if ($action === 'cache-config' && $app !== null) {
@@ -272,13 +369,34 @@ if ($action === 'delete-altlasten') {
 // ---------------------------------------------------------------------------
 $protokoll = null;
 $protokollDatei = null;
+$protokollKopf = null;
 $logs = glob($basePath.'/storage/logs/laravel*.log') ?: [];
 if ($logs !== []) {
     rsort($logs);
     $protokollDatei = basename($logs[0]);
     $inhalt = (string) file_get_contents($logs[0]);
     $zeilen = explode("\n", rtrim($inhalt));
-    $protokoll = implode("\n", array_slice($zeilen, -40));
+
+    /*
+     * Der Anfang des letzten Eintrags ist die entscheidende Zeile: dort steht
+     * die Ausnahme mit ihrer Meldung. Ein Auszug vom Ende der Datei zeigt nur
+     * das Ende des Aufrufstapels und damit nicht die Ursache. Gesucht wird
+     * deshalb die letzte Zeile, die mit einem Zeitstempel beginnt.
+     */
+    $beginn = null;
+    for ($i = count($zeilen) - 1; $i >= 0; $i--) {
+        if (preg_match('/^\[\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/', $zeilen[$i]) === 1) {
+            $beginn = $i;
+            break;
+        }
+    }
+
+    if ($beginn !== null) {
+        $protokollKopf = $zeilen[$beginn];
+        $protokoll = implode("\n", array_slice($zeilen, $beginn, 60));
+    } else {
+        $protokoll = implode("\n", array_slice($zeilen, -60));
+    }
 }
 
 $cacheVorhanden = zwischenspeicherDateien($basePath);
@@ -384,6 +502,75 @@ Datei: <?= h($startFehler->getFile()) ?>, Zeile <?= (int) $startFehler->getLine(
     </div>
 
     <div class="karte">
+        <h2>2b. Pflichtangaben und gezielte Proben</h2>
+        <?php if ($pflichtBefunde === [] && $proben === []) { ?>
+            <p class="klein">Keine Angaben prüfbar, solange die Anwendung nicht startet.</p>
+        <?php } ?>
+        <?php if ($pflichtBefunde !== []) { ?>
+            <table>
+                <thead><tr><th style="width:180px;">Einstellung</th><th>Befund</th></tr></thead>
+                <tbody>
+                <?php foreach ($pflichtBefunde as $b) { ?>
+                    <tr>
+                        <td><?= h($b['key']) ?></td>
+                        <td><?= $b['severity'] === 'fehler' ? '<strong>Fehler:</strong> ' : 'Hinweis: ' ?><?= h($b['message']) ?></td>
+                    </tr>
+                <?php } ?>
+                </tbody>
+            </table>
+        <?php } elseif (! $inspektorFehlt) { ?>
+            <div class="m ok">Die Pflichtangaben sind vorhanden, der Anwendungsschlüssel hat die
+                richtige Länge.</div>
+        <?php } ?>
+
+        <?php
+        $schluesselFehlt = false;
+        foreach ($pflichtBefunde as $b) {
+            if ($b['key'] === 'APP_KEY' && $b['severity'] === 'fehler'
+                && str_contains($b['message'], 'fehlt')) {
+                $schluesselFehlt = true;
+            }
+        }
+        ?>
+        <?php if ($schluesselFehlt) { ?>
+            <div class="m fehler" style="margin-top:12px;">
+                <strong>Rückweg ohne Kommandozeile.</strong>
+                <p style="margin:8px 0 0;">Ohne Anwendungsschlüssel läuft die Anwendung nicht.
+                Der alte Schlüssel lässt sich nicht wiederherstellen. Ein neuer Schlüssel wird
+                hier erzeugt und in der .env hinterlegt; der Wert wird nicht angezeigt und eine
+                Sicherung der bisherigen Datei angelegt.</p>
+                <p style="margin:8px 0 0;">Folge: Mit dem alten Schlüssel verschlüsselte Felder
+                sind nicht mehr lesbar. Betroffen sind ausschließlich die Geheimnisse der
+                Zwei-Faktor-Anmeldung; sie sind für die betroffenen Benutzer in der
+                Benutzerverwaltung zurückzusetzen. Fachdaten, Beträge und Dokumente sind nicht
+                betroffen.</p>
+                <form method="POST" style="margin-top:10px;"
+                      onsubmit="return confirm('Neuen Anwendungsschlüssel erzeugen? Geheimnisse der Zwei-Faktor-Anmeldung werden dadurch unlesbar.');">
+                    <input type="hidden" name="token" value="<?= $tokenEscaped ?>">
+                    <input type="hidden" name="action" value="app-key">
+                    <button type="submit">Anwendungsschlüssel neu erzeugen</button>
+                </form>
+            </div>
+        <?php } ?>
+
+        <?php if ($proben !== []) { ?>
+            <table style="margin-top:12px;">
+                <thead><tr><th style="width:180px;">Probe</th><th>Ergebnis</th></tr></thead>
+                <tbody>
+                <?php foreach ($proben as [$name, $art, $ergebnis, $erklaerung]) { ?>
+                    <tr>
+                        <td><?= h($name) ?><div class="klein"><?= h($erklaerung) ?></div></td>
+                        <td<?= $art === 'fehler' ? ' style="color:#8a2b1c;"' : '' ?>>
+                            <?= $art === 'fehler' ? '<strong>' : '' ?><?= h($ergebnis) ?><?= $art === 'fehler' ? '</strong>' : '' ?>
+                        </td>
+                    </tr>
+                <?php } ?>
+                </tbody>
+            </table>
+        <?php } ?>
+    </div>
+
+    <div class="karte">
         <h2>3. Zwischenspeicher</h2>
         <?php if ($cacheVorhanden === []) { ?>
             <p class="klein">Es liegen keine zwischengespeicherten Dateien unter bootstrap/cache.
@@ -413,7 +600,12 @@ Datei: <?= h($startFehler->getFile()) ?>, Zeile <?= (int) $startFehler->getLine(
                bevor das Protokoll eingerichtet ist, bleibt es leer; Punkt 1 und 2 sind dann
                die belastbaren Angaben.</p>
         <?php } else { ?>
-            <p class="klein">Datei: <?= h($protokollDatei) ?></p>
+            <p class="klein">Datei: <?= h($protokollDatei) ?>. Gezeigt wird der letzte
+               vollständige Eintrag ab seinem Zeitstempel, nicht das Ende der Datei: die
+               Ursache steht in der ersten Zeile, nicht im Aufrufstapel.</p>
+            <?php if ($protokollKopf !== null) { ?>
+                <div class="m fehler" style="word-break:break-word;"><?= h(mb_substr($protokollKopf, 0, 600)) ?></div>
+            <?php } ?>
             <pre><?= h($protokoll) ?></pre>
         <?php } ?>
     </div>

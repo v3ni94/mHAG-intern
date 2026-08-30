@@ -175,6 +175,105 @@ class EnvFileInspector
         return self::inspect((string) file_get_contents($pfad));
     }
 
+    /**
+     * Prüfung der Pflichtangaben, unabhängig von der Syntax.
+     *
+     * Hintergrund: Eine syntaktisch fehlerfreie .env kann trotzdem jede Seite
+     * lahmlegen. Fehlt der Anwendungsschlüssel APP_KEY, lässt sich der
+     * Verschlüsseler nicht erzeugen; die Anwendung startet, jede Anfrage
+     * bricht aber ab. Solange bootstrap/cache/config.php vorhanden ist, wird
+     * die .env nicht gelesen und der Mangel bleibt verdeckt.
+     *
+     * Werte werden auch hier nicht wiedergegeben. Zum Anwendungsschlüssel
+     * wird ausschließlich festgestellt, ob er vorhanden ist und die richtige
+     * Länge hat.
+     *
+     * @return array<int, array{line: int, key: string, severity: string, message: string}>
+     */
+    public static function pflichtangaben(string $inhalt): array
+    {
+        $werte = self::werte($inhalt);
+        $befunde = [];
+
+        $schluessel = $werte['APP_KEY'] ?? null;
+        if ($schluessel === null || trim($schluessel) === '') {
+            $befunde[] = self::befund(0, 'APP_KEY', self::FEHLER,
+                'Der Anwendungsschlüssel fehlt. Ohne ihn lässt sich der Verschlüsseler nicht '
+                .'erzeugen und jede Seite endet mit einem Serverfehler 500. Die Anwendung '
+                .'startet trotzdem, der Mangel zeigt sich erst bei einer Anfrage.');
+        } else {
+            $roh = str_starts_with($schluessel, 'base64:')
+                ? (base64_decode(substr($schluessel, 7), true) ?: '')
+                : $schluessel;
+
+            if (strlen($roh) !== 32) {
+                $befunde[] = self::befund(0, 'APP_KEY', self::FEHLER,
+                    'Der Anwendungsschlüssel hat nicht die erforderliche Länge von 32 Byte '
+                    .'(festgestellt: '.strlen($roh).' Byte). Für das eingestellte Verfahren '
+                    .'AES-256-CBC ist genau diese Länge nötig. Der Wert wird hier nicht '
+                    .'angezeigt.');
+            }
+        }
+
+        foreach (['APP_ENV', 'APP_URL', 'DB_CONNECTION'] as $pflicht) {
+            if (! isset($werte[$pflicht]) || trim($werte[$pflicht]) === '') {
+                $befunde[] = self::befund(0, $pflicht, self::WARNUNG,
+                    'Die Einstellung fehlt oder ist leer. Es gilt dann die Vorgabe des '
+                    .'Framework, was im Produktivbetrieb selten gewollt ist.');
+            }
+        }
+
+        if (! extension_loaded('openssl')) {
+            $befunde[] = self::befund(0, 'PHP openssl', self::FEHLER,
+                'Die PHP-Erweiterung openssl ist nicht geladen. Ohne sie lässt sich der '
+                .'Verschlüsseler nicht erzeugen.');
+        }
+
+        return $befunde;
+    }
+
+    /** Pflichtangaben zu einer Datei. */
+    public static function pflichtangabenFile(string $pfad): array
+    {
+        if (! is_readable($pfad)) {
+            return [self::befund(0, '', self::FEHLER,
+                'Die Datei .env wurde nicht gefunden oder ist nicht lesbar.')];
+        }
+
+        return self::pflichtangaben((string) file_get_contents($pfad));
+    }
+
+    /**
+     * Einstellungen als Name auf Wert. Bewusst nicht oeffentlich: die Werte
+     * duerfen die Klasse nicht verlassen.
+     *
+     * @return array<string, string>
+     */
+    private static function werte(string $inhalt): array
+    {
+        $werte = [];
+        foreach (preg_split('/\r\n|\r|\n/', $inhalt) ?: [] as $zeile) {
+            $roh = trim($zeile);
+            if ($roh === '' || str_starts_with($roh, '#') || ! str_contains($roh, '=')) {
+                continue;
+            }
+            [$name, $wert] = explode('=', $roh, 2);
+            $name = trim(preg_replace('/^export[ \t]+/', '', trim($name)) ?? '');
+            $wert = trim($wert);
+            $laenge = strlen($wert);
+            if ($laenge >= 2
+                && (($wert[0] === '"' && $wert[$laenge - 1] === '"')
+                    || ($wert[0] === "'" && $wert[$laenge - 1] === "'"))) {
+                $wert = substr($wert, 1, -1);
+            }
+            if ($name !== '') {
+                $werte[$name] = $wert;
+            }
+        }
+
+        return $werte;
+    }
+
     /** Nur die Befunde, die den Start der Anwendung verhindern. */
     public static function fehler(array $befunde): array
     {

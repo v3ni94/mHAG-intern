@@ -149,4 +149,71 @@ class EnvFileInspectorTest extends TestCase
         $this->assertSame([], EnvFileInspector::fehler($befunde),
             'Die ausgelieferte .env.example darf keine Zeile enthalten, die den Start verhindert.');
     }
+
+    #[Test]
+    public function fehlender_anwendungsschluessel_wird_als_fehler_gemeldet(): void
+    {
+        $befunde = EnvFileInspector::pflichtangaben("APP_ENV=production\nAPP_URL=https://x.de\nDB_CONNECTION=mysql\nAPP_KEY=\n");
+
+        $fehler = EnvFileInspector::fehler($befunde);
+        $this->assertCount(1, $fehler);
+        $this->assertSame('APP_KEY', $fehler[0]['key']);
+        $this->assertStringContainsString('fehlt', $fehler[0]['message']);
+    }
+
+    #[Test]
+    public function fehlende_zeile_fuer_den_anwendungsschluessel_wird_erkannt(): void
+    {
+        $befunde = EnvFileInspector::pflichtangaben("APP_ENV=production\nAPP_URL=https://x.de\nDB_CONNECTION=mysql\n");
+
+        $this->assertTrue(EnvFileInspector::hatFehler($befunde));
+        $this->assertSame('APP_KEY', EnvFileInspector::fehler($befunde)[0]['key']);
+    }
+
+    #[Test]
+    public function anwendungsschluessel_mit_falscher_laenge_wird_erkannt(): void
+    {
+        $kurz = 'base64:'.base64_encode(random_bytes(16));
+        $befunde = EnvFileInspector::pflichtangaben("APP_KEY=$kurz\nAPP_ENV=production\nAPP_URL=https://x.de\nDB_CONNECTION=mysql\n");
+
+        $fehler = EnvFileInspector::fehler($befunde);
+        $this->assertCount(1, $fehler);
+        $this->assertStringContainsString('Länge', $fehler[0]['message']);
+        $this->assertStringContainsString('16 Byte', $fehler[0]['message']);
+    }
+
+    #[Test]
+    public function gueltiger_anwendungsschluessel_wird_nicht_beanstandet(): void
+    {
+        $inhalt = "APP_KEY=base64:".base64_encode(random_bytes(32))."\nAPP_ENV=production\n"
+            ."APP_URL=https://intranet.beispiel.de\nDB_CONNECTION=mysql\n";
+
+        $this->assertSame([], EnvFileInspector::pflichtangaben($inhalt));
+    }
+
+    #[Test]
+    public function pflichtangaben_geben_den_anwendungsschluessel_nicht_wieder(): void
+    {
+        $schluessel = base64_encode(random_bytes(32));
+        $befunde = EnvFileInspector::pflichtangaben("APP_KEY=$schluessel\n");
+
+        $text = json_encode($befunde, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $this->assertStringNotContainsString(substr($schluessel, 0, 16), (string) $text,
+            'Der Anwendungsschlüssel darf in keinem Befund erscheinen.');
+    }
+
+    #[Test]
+    public function echte_env_beispieldatei_hat_die_pflichtangaben(): void
+    {
+        $befunde = EnvFileInspector::pflichtangabenFile(base_path('.env.example'));
+
+        // Die Beispieldatei enthaelt bewusst keinen Anwendungsschluessel, er
+        // wird bei der Einrichtung erzeugt. Alles andere muss dastehen.
+        $andere = array_values(array_filter(
+            EnvFileInspector::fehler($befunde),
+            fn ($b) => $b['key'] !== 'APP_KEY',
+        ));
+
+        $this->assertSame([], $andere);
+    }
 }

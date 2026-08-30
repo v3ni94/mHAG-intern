@@ -45,6 +45,30 @@ if (SETUP_TOKEN_HASH === '' || $token === '' || ! password_verify($token, SETUP_
     exit;
 }
 
+/*
+ * Versionsprüfung VOR dem Laden der Anwendung. Ohne diese Prüfung würde eine
+ * zu alte PHP-Version zu einem nackten Serverfehler 500 führen, dessen Ursache
+ * ohne Zugriff auf die Serverprotokolle nicht erkennbar ist.
+ */
+$requiredPhp = '8.3.0';
+if (version_compare(PHP_VERSION, $requiredPhp, '<')) {
+    header('Content-Type: text/html; charset=utf-8');
+    echo '<!doctype html><html lang="de"><meta charset="utf-8"><title>PHP-Version zu alt</title>';
+    echo '<body style="font-family: Calibri, sans-serif; padding:40px; color:#2E2D2E; max-width:700px;">';
+    echo '<h1 style="font-size:20px;">PHP-Version zu alt</h1>';
+    echo '<div style="width:52px;height:3px;background:#E3AC48;margin-bottom:18px;"></div>';
+    echo '<p>Auf diesem Webspace läuft <strong>PHP '.htmlspecialchars(PHP_VERSION).'</strong>. '
+        .'Die Anwendung benötigt mindestens <strong>PHP '.htmlspecialchars($requiredPhp).'</strong>.</p>';
+    echo '<p>Bitte stellen Sie die PHP-Version im Kundenbereich Ihres Hosting-Anbieters für diese Domain '
+        .'auf '.htmlspecialchars($requiredPhp).' oder neuer um und rufen Sie diese Seite anschließend erneut auf. '
+        .'Bei IONOS findet sich die Einstellung unter Hosting, PHP-Einstellungen, jeweils für das Verzeichnis '
+        .'oder die Domain.</p>';
+    echo '<p style="color:#55534f;font-size:14px;">Solange eine zu alte Version aktiv ist, endet jeder Aufruf '
+        .'der Anwendung mit einem Serverfehler, ohne dass eine Meldung erscheint.</p>';
+    echo '</body></html>';
+    exit;
+}
+
 $basePath = dirname(__DIR__);
 $envPath = $basePath.'/.env';
 $action = (string) ($_POST['action'] ?? '');
@@ -115,7 +139,7 @@ if (! file_exists($envPath) && $action === 'create_env') {
 
 if ($action === 'generate_key') {
     $current = envGet($envPath, 'APP_KEY');
-    if ($current !== null && $current !== '' && str_starts_with($current, 'base64:')) {
+    if ($current !== null && $current !== '' && strncmp($current, 'base64:', 7) === 0) {
         $messages[] = ['warn', 'Es ist bereits ein Anwendungsschlüssel gesetzt. Er wurde nicht verändert, damit verschlüsselte Daten lesbar bleiben.'];
     } else {
         $key = 'base64:'.base64_encode(random_bytes(32));
@@ -130,6 +154,24 @@ $app = null;
 $laravelError = null;
 if (file_exists($basePath.'/vendor/autoload.php') && file_exists($envPath)) {
     try {
+        // Plattformprüfung von Composer vorab auswerten: sie beendet den
+        // Vorgang sonst mit einem nicht abfangbaren Fehler.
+        $platformCheck = $basePath.'/vendor/composer/platform_check.php';
+        if (file_exists($platformCheck)) {
+            $contents = (string) file_get_contents($platformCheck);
+            if (preg_match('/PHP_VERSION_ID >= (\\d+)/', $contents, $m) && PHP_VERSION_ID < (int) $m[1]) {
+                $id = (int) $m[1];
+                throw new RuntimeException(sprintf(
+                    'Das Paket wurde für PHP %d.%d.%d oder neuer gebaut, hier läuft PHP %s. '
+                        .'Bitte die PHP-Version der Domain erhöhen.',
+                    intdiv($id, 10000),
+                    intdiv($id % 10000, 100),
+                    $id % 100,
+                    PHP_VERSION,
+                ));
+            }
+        }
+
         require $basePath.'/vendor/autoload.php';
         $app = require_once $basePath.'/bootstrap/app.php';
         $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
@@ -196,7 +238,7 @@ foreach (['storage', 'storage/logs', 'storage/framework', 'bootstrap/cache'] as 
 }
 
 $appKey = $envExists ? (string) envGet($envPath, 'APP_KEY') : '';
-$keySet = $appKey !== '' && str_starts_with($appKey, 'base64:');
+$keySet = $appKey !== '' && strncmp($appKey, 'base64:', 7) === 0;
 $checks[] = status('Anwendungsschlüssel gesetzt', $keySet, $keySet ? 'ja' : 'nein, im Schritt unten erzeugen');
 
 $dbOk = false;
@@ -231,14 +273,16 @@ if ($dbOk) {
 
 $appUrl = $envExists ? (string) envGet($envPath, 'APP_URL') : '';
 $sessionDomain = $envExists ? (string) envGet($envPath, 'SESSION_DOMAIN') : '';
-$httpsHint = $appUrl !== '' && ! str_starts_with($appUrl, 'https://');
+$httpsHint = $appUrl !== '' && strncmp($appUrl, 'https://', 8) !== 0;
 $domainHint = $sessionDomain !== '' && $sessionDomain !== 'null'
-    && $appUrl !== '' && ! str_contains($appUrl, $sessionDomain);
+    && $appUrl !== '' && strpos($appUrl, $sessionDomain) === false;
 
-$allRequiredOk = ! in_array(false, array_map(
-    fn ($c) => $c['ok'] || $c['warning'],
-    $checks,
-), true);
+$allRequiredOk = true;
+foreach ($checks as $check) {
+    if (! $check['ok'] && ! $check['warning']) {
+        $allRequiredOk = false;
+    }
+}
 
 ?><!doctype html>
 <html lang="de">

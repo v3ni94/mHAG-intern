@@ -172,6 +172,17 @@ class DashboardService
         $activeStatuses = [LoanStatus::Active->value, LoanStatus::PartiallyRepaid->value];
         $activeCount = $loans->whereIn('status.value', $activeStatuses)->count();
 
+        /*
+         * Entwuerfe werden in den Geldbetraegen bewusst NICHT mitgerechnet: ein
+         * Entwurf ist keine Forderung, er wuerde das Gesamtportfolio
+         * ueberzeichnen. Sie muessen aber ausgewiesen werden. Wer ein Darlehen
+         * anlegt und danach ein Dashboard mit lauter Nullen sieht, kann den
+         * Zustand sonst nicht einordnen und haelt die Erfassung fuer verloren.
+         */
+        $draftCount = Loan::visibleTo($user)->inCurrentView($user)
+            ->where('status', LoanStatus::Draft->value)
+            ->count();
+
         $overdueLoanCount = RepaymentPlanItem::query()
             ->whereIn('loan_id', $loanIds)
             ->whereDate('due_date', '<', $today)
@@ -192,6 +203,18 @@ class DashboardService
             'overdue_amount' => ['label' => 'Überfälliges Kapital', 'value' => $sum['overdue_amount'], 'severity' => Money::isPositive($sum['overdue_amount']) ? 'danger' : 'success', 'hint' => null, 'money' => true],
             'active_loans' => ['label' => 'Aktive Darlehen', 'value' => (string) $activeCount, 'severity' => null, 'hint' => null, 'money' => false],
             'overdue_loans' => ['label' => 'Überfällige Darlehen', 'value' => (string) $overdueLoanCount, 'severity' => $overdueLoanCount > 0 ? 'danger' : 'success', 'hint' => 'Mit erfassten Zahlungsausfällen', 'money' => false],
+            'draft_loans' => [
+                'label' => 'Darlehen im Entwurf',
+                'value' => (string) $draftCount,
+                'severity' => $draftCount > 0 ? 'warning' : null,
+                'hint' => $draftCount > 0
+                    ? 'Nicht in den Geldbeträgen enthalten. Erst nach Aktivierung.'
+                    : null,
+                'money' => false,
+                'link' => $draftCount > 0
+                    ? route('loans.index', ['status' => LoanStatus::Draft->value])
+                    : null,
+            ],
         ];
     }
 
@@ -219,7 +242,14 @@ class DashboardService
             ->sortDesc()
             ->take(10);
 
-        $byStatus = $loans->groupBy(fn (Loan $l) => $l->status?->label() ?? 'Unbekannt')
+        /*
+         * Das Statusdiagramm zaehlt Vorgaenge, keine Betraege. Entwuerfe und
+         * archivierte Darlehen gehoeren deshalb hinein: das Diagramm soll die
+         * Verteilung zeigen, auch die noch nicht aktivierten.
+         */
+        $byStatus = Loan::visibleTo($user)->inCurrentView($user)
+            ->get(['status'])
+            ->groupBy(fn (Loan $l) => $l->status?->label() ?? 'Unbekannt')
             ->map->count();
 
         // Soll-Cashflows der nächsten 12 Monate aus dem Zahlungsplan

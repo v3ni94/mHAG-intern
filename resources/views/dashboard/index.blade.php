@@ -29,11 +29,23 @@
     <div class="row g-3 mb-4">
         @foreach ($kpis as $kpi)
             <div class="col-6 col-md-4 col-xl-3">
-                <x-kpi-card
-                    :label="$kpi['label']"
-                    :value="$kpi['money'] ? (auth()->user()->privacy_mode ? '•••••• €' : format_money($kpi['value'])) : $kpi['value']"
-                    :severity="$kpi['severity']"
-                    :hint="$kpi['hint']" />
+                {{-- Kennzahlen mit Verweis fuehren direkt auf die gefilterte Liste,
+                     damit ein Hinweis nicht in einer Sackgasse endet. --}}
+                @if (($kpi['link'] ?? null) !== null)
+                    <a href="{{ $kpi['link'] }}" class="text-decoration-none">
+                        <x-kpi-card
+                            :label="$kpi['label']"
+                            :value="$kpi['money'] ? (auth()->user()->privacy_mode ? '•••••• €' : format_money($kpi['value'])) : $kpi['value']"
+                            :severity="$kpi['severity']"
+                            :hint="$kpi['hint']" />
+                    </a>
+                @else
+                    <x-kpi-card
+                        :label="$kpi['label']"
+                        :value="$kpi['money'] ? (auth()->user()->privacy_mode ? '•••••• €' : format_money($kpi['value'])) : $kpi['value']"
+                        :severity="$kpi['severity']"
+                        :hint="$kpi['hint']" />
+                @endif
             </div>
         @endforeach
     </div>

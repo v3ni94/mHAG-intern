@@ -492,6 +492,82 @@ class LoanController extends Controller
     }
 
     /**
+     * Ausfall erfassen (Anforderung 30.08.2026).
+     *
+     * Ausfalldatum ist ein Wirkungsdatum: ab diesem Tag entstehen keine
+     * weiteren Soll-Zinsen. Ein Abschreibungsbetrag ist freiwillig; ohne ihn
+     * bleibt die Forderung bestehen und nur der Status aendert sich. Es findet
+     * keine rechtliche Bewertung und keine Einstufung als uneinbringlich statt.
+     */
+    public function recordDefault(
+        \App\Http\Requests\Loans\RecordLoanDefaultRequest $request,
+        int $loan,
+        \App\Services\Loans\LoanDefaultService $defaultService,
+    ): RedirectResponse {
+        $user = $this->currentUser($request);
+        $model = $this->loanFor($user, $loan);
+        $data = $request->validated();
+
+        $writeOff = $data['write_off_amount'] ?? null;
+        $result = $defaultService->record(
+            $model,
+            Carbon::parse($data['defaulted_on']),
+            $data['reason'],
+            $writeOff !== null ? (string) $writeOff : null,
+            $user,
+        );
+
+        $meldung = 'Ausfall wurde zum '.format_date($data['defaulted_on']).' erfasst. '
+            .'Ab diesem Tag entstehen keine weiteren Soll-Zinsen.';
+        if ($result['write_off']) {
+            $meldung .= ' Die Abschreibung über '.format_money($writeOff).' wurde gebucht.';
+        }
+        $meldung .= ' Die Erfassung ist eine Arbeitsangabe ohne rechtliche Bewertung;'
+            .' eine Freigabe durch die Geschäftsführung ist einzuholen.';
+
+        return redirect()
+            ->route('loans.show', $model)
+            ->with('success', $meldung);
+    }
+
+    /**
+     * Ausfall zurücknehmen. Buchungen bleiben erhalten; die Abschreibung wird
+     * auf Wunsch per Gegenbuchung aufgehoben, niemals gelöscht.
+     */
+    public function revokeDefault(
+        Request $request,
+        int $loan,
+        \App\Services\Loans\LoanDefaultService $defaultService,
+    ): RedirectResponse {
+        $user = $this->currentUser($request);
+        $model = $this->loanFor($user, $loan);
+
+        $validated = $request->validate([
+            'note' => ['nullable', 'string', 'max:2000'],
+            'reverse_write_off' => ['nullable', 'boolean'],
+        ], [], ['note' => 'Notiz']);
+
+        if ($model->defaulted_on === null && $model->status !== LoanStatus::Defaulted) {
+            return back()->with('danger', 'Für dieses Darlehen ist kein Ausfall erfasst.');
+        }
+
+        $reversals = $defaultService->revoke(
+            $model,
+            $request->boolean('reverse_write_off'),
+            $validated['note'] ?? null,
+            $user,
+        );
+
+        $meldung = 'Der Ausfall wurde zurückgenommen, die Soll-Zinsen laufen wieder.';
+        if ($reversals > 0) {
+            $meldung .= ' '.$reversals.' Abschreibung'.($reversals === 1 ? '' : 'en').' wurde'
+                .($reversals === 1 ? '' : 'n').' per Gegenbuchung aufgehoben.';
+        }
+
+        return redirect()->route('loans.show', $model)->with('success', $meldung);
+    }
+
+    /**
      * Manuelle Neuberechnung (Abschnitt 36): Button auf der Detailseite.
      *
      * Zusätzlich (Abschnitt 44) die ausdrückliche Berechnung und Buchung der

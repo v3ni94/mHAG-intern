@@ -38,6 +38,8 @@ class Loan extends Model
             // Zinskapitalisierung: Zuschreibung auf den valutierten Betrag
             'interest_capitalization' => 'boolean',
             'interest_capitalization_from' => 'date',
+            // Ausfall (nicht Verzug): Wirkungsdatum der Erfassung
+            'defaulted_on' => 'date',
             'repayment_model' => \App\Enums\RepaymentModel::class,
             'status' => \App\Enums\LoanStatus::class,
             'risk_rating' => \App\Enums\RiskRating::class,

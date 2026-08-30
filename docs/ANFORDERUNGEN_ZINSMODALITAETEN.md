@@ -213,6 +213,29 @@ Der Status "Ausgefallen" existiert. Zu ergänzen:
 - Keine rechtliche Bewertung, keine automatische Einstufung als
   uneinbringlich (Masterprompt §133).
 
+**Umgesetzt am 30.08.2026.** Neue Felder `loans.defaulted_on` (Ausfalldatum
+als Wirkungsdatum) und `loans.default_reason`; neuer `LoanDefaultService` mit
+`record()` und `revoke()`; Formular im Kopf der Darlehensdetailseite.
+
+- Ab dem Ausfalldatum entstehen keine weiteren Soll-Zinsen. Umsetzung im
+  Zahlungsplan: das Ausfalldatum wirkt als zusätzliches Ende des
+  Zinshorizonts, die laufende Periode endet als Stummelperiode am Ausfalltag.
+- Der Grund ist Pflichtangabe. Eine Ausfallerfassung ohne Begründung wäre
+  nicht nachvollziehbar.
+- Der Abschreibungsbetrag ist freiwillig und wird als `write_off` mit
+  Wirkungsdatum des Ausfalls gebucht. Ohne Betrag bleibt die Forderung
+  bestehen.
+- Die Rücknahme setzt den Status zurück und entfernt das Ausfalldatum; die
+  Soll-Zinsen laufen dadurch wieder. Abschreibungen werden auf Wunsch per
+  Gegenbuchung aufgehoben, niemals gelöscht. Eine erneute Rücknahme erzeugt
+  keine zweite Gegenbuchung.
+- Die Meldung nach der Erfassung weist ausdrücklich darauf hin, dass es sich
+  um eine Arbeitsangabe ohne rechtliche Bewertung handelt und eine Freigabe
+  durch die Geschäftsführung einzuholen ist.
+
+Belegt durch `tests/Feature/Loans/EngineDefaultEventTest.php` (10 Tests) und
+`tests/Feature/Loans/UiLoanDefaultTest.php` (6 Tests).
+
 ## Reihenfolge der Umsetzung
 
 1. Fälligkeitstag (kleine, klar abgegrenzte Änderung am Zahlungsplan)

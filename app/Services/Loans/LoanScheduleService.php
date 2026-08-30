@@ -87,6 +87,13 @@ class LoanScheduleService
                 $maturity = $loan->due_date ?? $loan->contract_end;
                 if ($maturity) {
                     $maturity = Carbon::parse($maturity->toDateString());
+                    // Ausfall begrenzt auch die endfaellige Zinsperiode
+                    if ($loan->defaulted_on !== null) {
+                        $defaultDay = Carbon::parse($loan->defaulted_on->toDateString());
+                        if ($defaultDay->lt($maturity)) {
+                            $maturity = $defaultDay;
+                        }
+                    }
 
                     return [[
                         'start' => $start->toDateString(),
@@ -100,6 +107,18 @@ class LoanScheduleService
         }
 
         $hardEnd = $loan->contract_end ?? $loan->due_date;
+
+        // Ausfall (Anforderung 30.08.2026): ab dem Ausfalldatum entstehen
+        // KEINE weiteren Soll-Zinsen. Bereits entstandene bleiben erhalten,
+        // die laufende Periode endet am Ausfalltag. Zinsen nach dem Ausfall
+        // waeren eine Forderung, die das System nicht unterstellen darf.
+        if ($loan->defaulted_on !== null) {
+            $defaultDay = Carbon::parse($loan->defaulted_on->toDateString());
+            $hardEnd = ($hardEnd === null || $defaultDay->lt(Carbon::parse($hardEnd->toDateString())))
+                ? $defaultDay
+                : $hardEnd;
+        }
+
         $horizon = $hardEnd
             ? Carbon::parse($hardEnd->toDateString())
             : today()->addMonthsNoOverflow(12);

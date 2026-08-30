@@ -41,6 +41,10 @@ Route::prefix('darlehen')->name('loans.')->group(function () {
         Route::post('/{loan}/statuswechsel', [LoanController::class, 'transition'])->whereNumber('loan')->name('transition');
         Route::post('/{loan}/neuberechnung', [LoanController::class, 'recalculate'])->whereNumber('loan')->name('recalculate');
 
+        // Ausfall erfassen und zurücknehmen (Anforderung 30.08.2026)
+        Route::post('/{loan}/ausfall', [LoanController::class, 'recordDefault'])->whereNumber('loan')->name('default.record');
+        Route::post('/{loan}/ausfall-zuruecknehmen', [LoanController::class, 'revokeDefault'])->whereNumber('loan')->name('default.revoke');
+
         // Zinssatz-Staffel (Abschnitt 40): historisierte Zinssätze, Änderung löst Neuberechnung aus
         Route::post('/{loan}/zinssaetze', [LoanInterestTermController::class, 'store'])->whereNumber('loan')->name('interest-terms.store');
         Route::delete('/{loan}/zinssaetze/{term}', [LoanInterestTermController::class, 'destroy'])->whereNumber('loan')->whereNumber('term')->name('interest-terms.destroy');

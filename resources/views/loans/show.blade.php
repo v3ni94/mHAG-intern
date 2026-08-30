@@ -33,6 +33,57 @@
                     </div>
                 </div>
             @endif
+
+            {{-- Ausfall erfassen und zurücknehmen (Anforderung 30.08.2026) --}}
+            <div class="dropdown">
+                <button class="btn btn-outline-danger btn-sm dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    {{ $loan->defaulted_on ? 'Ausfall' : 'Ausfall erfassen' }}
+                </button>
+                <div class="dropdown-menu dropdown-menu-end p-3" style="min-width: 340px;">
+                    @if ($loan->defaulted_on)
+                        <p class="small mb-2">
+                            Ausfall erfasst zum <strong>{{ format_date($loan->defaulted_on) }}</strong>.
+                            Ab diesem Tag entstehen keine weiteren Soll-Zinsen.
+                            @if ($loan->default_reason)
+                                <br><span class="text-muted">Grund: {{ $loan->default_reason }}</span>
+                            @endif
+                        </p>
+                        <form method="POST" action="{{ route('loans.default.revoke', $loan) }}">
+                            @csrf
+                            <label class="form-label small" for="revoke-note">Notiz (optional)</label>
+                            <input type="text" id="revoke-note" name="note" class="form-control form-control-sm mb-2" maxlength="2000">
+                            <div class="form-check mb-2">
+                                <input type="hidden" name="reverse_write_off" value="0">
+                                <input type="checkbox" id="reverse-write-off" name="reverse_write_off" value="1" class="form-check-input" checked>
+                                <label class="form-check-label small" for="reverse-write-off">
+                                    Abschreibungen per Gegenbuchung aufheben
+                                </label>
+                            </div>
+                            <button type="submit" class="btn btn-outline-secondary btn-sm w-100">Ausfall zurücknehmen</button>
+                        </form>
+                    @else
+                        <form method="POST" action="{{ route('loans.default.record', $loan) }}">
+                            @csrf
+                            <label class="form-label small" for="default-date">Ausfalldatum (Wirkungsdatum) *</label>
+                            <input type="date" id="default-date" name="defaulted_on" value="{{ now()->toDateString() }}"
+                                   class="form-control form-control-sm mb-2" required>
+                            <label class="form-label small" for="default-reason">Grund *</label>
+                            <input type="text" id="default-reason" name="reason" class="form-control form-control-sm mb-2"
+                                   maxlength="2000" required>
+                            <label class="form-label small" for="default-write-off">Abschreibungsbetrag (optional)</label>
+                            <input type="text" inputmode="decimal" id="default-write-off" name="write_off_amount"
+                                   class="form-control form-control-sm mb-1" placeholder="z. B. 25.000,00">
+                            <div class="form-text mb-2">
+                                Ohne Betrag bleibt die Forderung bestehen, es ändert sich nur der Status.
+                                Ab dem Ausfalldatum entstehen keine weiteren Soll-Zinsen.
+                                Keine rechtliche Bewertung; Freigabe durch die Geschäftsführung einholen.
+                            </div>
+                            <button type="submit" class="btn btn-danger btn-sm w-100">Ausfall erfassen</button>
+                        </form>
+                    @endif
+                </div>
+            </div>
         @endif
         {{-- Forderungsaufstellung (Abschnitt 51): Stichtag wählen, PDF erzeugen --}}
         <form method="GET" action="{{ route('loans.statement', $loan) }}" target="_blank" class="d-flex gap-1 align-items-center">

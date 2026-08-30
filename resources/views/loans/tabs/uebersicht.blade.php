@@ -55,6 +55,20 @@
                     </dd>
                     <dt class="col-5">Verzugsbeginn</dt>
                     <dd class="col-7">{{ $loan->default_interest_start ? format_date($loan->default_interest_start) : 'nicht erfasst' }}</dd>
+                    <dt class="col-5">
+                        Ausfall
+                        <x-help-icon text="Erfasster Ausfall der Forderung mit Wirkungsdatum. Ab diesem Tag entstehen keine weiteren Soll-Zinsen; bereits entstandene bleiben erhalten. Die Angabe ist eine Arbeitsangabe ohne rechtliche Bewertung." />
+                    </dt>
+                    <dd class="col-7">
+                        @if ($loan->defaulted_on)
+                            erfasst zum {{ format_date($loan->defaulted_on) }}
+                            @if ($loan->default_reason)
+                                <div class="small text-muted">{{ $loan->default_reason }}</div>
+                            @endif
+                        @else
+                            nicht erfasst
+                        @endif
+                    </dd>
                     <dt class="col-5">Sachbearbeiter</dt><dd class="col-7">{{ $loan->handler?->name ?: 'ohne' }}</dd>
                     <dt class="col-5">Projekt</dt><dd class="col-7">{{ $loan->project ?: 'ohne' }}</dd>
                     <dt class="col-5">Kostenstelle</dt><dd class="col-7">{{ $loan->cost_center ?: 'ohne' }}</dd>

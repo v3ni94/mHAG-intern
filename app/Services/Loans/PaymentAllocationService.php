@@ -50,9 +50,7 @@ class PaymentAllocationService
         RepaymentItemStatus::Late,
     ];
 
-    public function __construct(protected InterestCalculationService $interest)
-    {
-    }
+    public function __construct(protected InterestCalculationService $interest) {}
 
     /**
      * Verrechnet eine Zahlung. manualBuckets erlaubt eine manuelle Aufteilung

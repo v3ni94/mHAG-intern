@@ -29,9 +29,7 @@ use Illuminate\Support\Carbon;
  */
 class LoanScheduleService
 {
-    public function __construct(protected InterestCalculationService $interest)
-    {
-    }
+    public function __construct(protected InterestCalculationService $interest) {}
 
     public function generate(Loan $loan): void
     {

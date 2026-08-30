@@ -3,8 +3,8 @@
 namespace Tests\Feature\Loans;
 
 use App\Enums\RepaymentItemStatus;
-use App\Enums\RepaymentItemType;
 use App\Models\Loan;
+use App\Models\LoanTransaction;
 use App\Services\Loans\LoanScheduleService;
 use App\Support\Money;
 use Illuminate\Support\Carbon;
@@ -252,7 +252,7 @@ class EngineScheduleTest extends EngineTestCase
         $this->assertSame(12, $loan->repaymentPlanItems()->where('item_type', 'interest')->count());
 
         $tx = $loan->transactions()->first();
-        \App\Models\LoanTransaction::create([
+        LoanTransaction::create([
             'loan_id' => $loan->id,
             'booking_type' => 'cancellation',
             'booking_date' => '2026-08-30',

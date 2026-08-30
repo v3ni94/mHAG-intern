@@ -26,9 +26,7 @@ use Illuminate\Support\Facades\DB;
  */
 class DisbursementService
 {
-    public function __construct(protected LoanRecalculationService $recalculation)
-    {
-    }
+    public function __construct(protected LoanRecalculationService $recalculation) {}
 
     /**
      * Auszahlung planen. data: planned_amount, planned_date, optional

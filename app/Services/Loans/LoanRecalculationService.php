@@ -27,8 +27,7 @@ class LoanRecalculationService
     public function __construct(
         protected LoanScheduleService $schedule,
         protected LoanBalanceService $balance,
-    ) {
-    }
+    ) {}
 
     public function recalculate(Loan $loan, string $trigger, ?CarbonInterface $earliestAffectedDate = null, ?User $user = null): LoanRecalculation
     {

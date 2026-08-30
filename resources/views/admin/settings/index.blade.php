@@ -68,4 +68,76 @@
 
         <button class="btn btn-primary mb-4">Einstellungen speichern</button>
     </form>
+
+    <div class="card mb-4">
+        <div class="card-header">E-Mail-Versand</div>
+        <div class="card-body">
+            <p class="form-text mt-0">
+                Diese Angaben stammen aus der Serverkonfiguration (.env) und werden hier nur angezeigt.
+                Zugangsdaten des Postfachs werden bewusst nicht dargestellt.
+            </p>
+            <div class="row g-3">
+                <div class="col-12 col-lg-6">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            <tr><td class="text-muted" style="width: 45%;">Verfahren</td><td>{{ $mailConfig['mailer'] }}</td></tr>
+                            <tr><td class="text-muted">Postausgangsserver</td><td>{{ $mailConfig['host'] ?: 'nicht gesetzt' }}</td></tr>
+                            <tr><td class="text-muted">Port</td><td>{{ $mailConfig['port'] ?: 'nicht gesetzt' }}</td></tr>
+                            <tr><td class="text-muted">Verschlüsselung</td><td>{{ $mailConfig['scheme'] }}</td></tr>
+                            <tr><td class="text-muted">Anmeldename</td><td>{{ $mailConfig['username'] ?: 'nicht gesetzt' }}</td></tr>
+                            <tr>
+                                <td class="text-muted">Passwort</td>
+                                <td>
+                                    @if ($mailConfig['password_set'])
+                                        <x-status-badge severity="success" label="hinterlegt" />
+                                    @else
+                                        <x-status-badge severity="danger" label="nicht hinterlegt" />
+                                    @endif
+                                </td>
+                            </tr>
+                            <tr><td class="text-muted">Absenderadresse</td><td>{{ $mailConfig['from'] }}</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="versal-label mb-1">Versand prüfen</div>
+                    <p class="form-text mt-0">
+                        Versendet eine Testnachricht. So lässt sich die Konfiguration prüfen, bevor Einladungen
+                        und Zugangsdaten an Benutzer verschickt werden.
+                    </p>
+                    <form method="POST" action="{{ route('admin.settings.test-mail') }}">
+                        @csrf
+                        <div class="input-group input-group-sm">
+                            <input type="email" name="test_recipient" class="form-control"
+                                   value="{{ old('test_recipient', auth()->user()->email) }}"
+                                   placeholder="Empfängeradresse" required>
+                            <button class="btn btn-gold" type="submit"><i class="bi bi-send"></i> Testnachricht senden</button>
+                        </div>
+                        @error('test_recipient')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                    </form>
+
+                    @if ($mailConfig['last_test'])
+                        <div class="mt-3 small">
+                            <div class="versal-label">Letzte Prüfung</div>
+                            @if ($mailConfig['last_test']['successful'])
+                                <x-status-badge severity="success" label="Erfolgreich" />
+                            @else
+                                <x-status-badge severity="danger" label="Fehlgeschlagen" />
+                            @endif
+                            <span class="text-muted">
+                                {{ format_datetime($mailConfig['last_test']['tested_at']) }} Uhr an
+                                {{ $mailConfig['last_test']['recipient'] }}
+                                @if ($mailConfig['last_test']['tested_by'])
+                                    (ausgelöst von {{ $mailConfig['last_test']['tested_by'] }})
+                                @endif
+                            </span>
+                            @if (! $mailConfig['last_test']['successful'] && $mailConfig['last_test']['error'])
+                                <div class="text-danger mt-1">{{ $mailConfig['last_test']['error'] }}</div>
+                            @endif
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
 @endsection

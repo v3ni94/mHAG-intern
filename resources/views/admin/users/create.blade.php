@@ -67,6 +67,18 @@
                             <input class="form-check-input" type="checkbox" name="is_active" value="1" id="is_active" @checked(old('is_active', '1') === '1')>
                             <label class="form-check-label" for="is_active">Konto aktiv</label>
                         </div>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" name="send_credentials" value="1"
+                                   id="send_credentials" @checked(old('send_credentials'))>
+                            <label class="form-check-label" for="send_credentials">
+                                Zugangsdaten anschließend per E-Mail an den Benutzer senden
+                            </label>
+                            <div class="form-text">
+                                Die Nachricht enthält Anmeldeadresse, Rollen und einen zeitlich begrenzten Link,
+                                über den der Benutzer sein Passwort selbst festlegt. Ein Passwort im Klartext wird
+                                nie versendet.
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="mt-4 d-flex gap-2">

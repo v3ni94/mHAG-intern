@@ -8,9 +8,9 @@ use App\Mail\UserInvitationMail;
 use App\Models\Entity;
 use App\Models\UserInvitation;
 use App\Services\AuditService;
+use App\Services\MailDispatcher;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Spatie\Permission\Models\Role;
@@ -50,8 +50,6 @@ class InvitationController extends Controller
             'invited_by' => $request->user()->id,
         ]);
 
-        Mail::to($invitation->email)->send(new UserInvitationMail($invitation, $token));
-
         AuditService::log('admin.invitations.created', $invitation, [], [
             'email' => $invitation->email,
             'roles' => $invitation->roles,
@@ -59,8 +57,20 @@ class InvitationController extends Controller
             'expires_at' => $invitation->expires_at->toDateTimeString(),
         ]);
 
-        return redirect()->route('admin.invitations.index')
-            ->with('success', 'Die Einladung wurde erstellt und per E-Mail versendet.');
+        $result = MailDispatcher::send(
+            $invitation->email,
+            new UserInvitationMail($invitation, $token),
+            'admin.invitations.mail_sent',
+            $invitation,
+        );
+
+        return redirect()->route('admin.invitations.index')->with(
+            $result['sent'] ? 'success' : 'warning',
+            $result['sent']
+                ? 'Die Einladung wurde erstellt und per E-Mail versendet.'
+                : 'Die Einladung wurde erstellt, der Versand ist jedoch fehlgeschlagen: '.$result['error']
+                    .' Die Einladung bleibt gültig, Sie können den Versand über "Erneut senden" wiederholen.',
+        );
     }
 
     public function resend(Request $request, UserInvitation $invitation): RedirectResponse
@@ -75,11 +85,21 @@ class InvitationController extends Controller
             'expires_at' => now()->addDays(7),
         ])->save();
 
-        Mail::to($invitation->email)->send(new UserInvitationMail($invitation, $token));
-
         AuditService::log('admin.invitations.resent', $invitation, [], ['email' => $invitation->email]);
 
-        return back()->with('success', 'Die Einladung wurde mit neuem Link erneut versendet.');
+        $result = MailDispatcher::send(
+            $invitation->email,
+            new UserInvitationMail($invitation, $token),
+            'admin.invitations.mail_sent',
+            $invitation,
+        );
+
+        return back()->with(
+            $result['sent'] ? 'success' : 'warning',
+            $result['sent']
+                ? 'Die Einladung wurde mit neuem Link erneut versendet.'
+                : 'Der Versand ist fehlgeschlagen: '.$result['error'].' Der neue Link ist trotzdem gültig.',
+        );
     }
 
     public function revoke(Request $request, UserInvitation $invitation): RedirectResponse

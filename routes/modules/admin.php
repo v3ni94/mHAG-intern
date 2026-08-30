@@ -30,6 +30,13 @@ Route::prefix('administration')->name('admin.')->group(function () {
             Route::put('/{user}', [UserController::class, 'update'])->name('update');
             Route::post('/{user}/deaktivieren', [UserController::class, 'deactivate'])->name('deactivate');
             Route::post('/{user}/aktivieren', [UserController::class, 'activate'])->name('activate');
+
+            // Zugangsdaten und Kontopflege (Abschnitt 9)
+            Route::post('/{user}/zugangsdaten-senden', [UserController::class, 'sendCredentials'])->name('send-credentials');
+            Route::post('/{user}/passwort-zuruecksetzen', [UserController::class, 'sendPasswordReset'])->name('send-password-reset');
+            Route::post('/{user}/zwei-faktor-zuruecksetzen', [UserController::class, 'resetTwoFactor'])->name('reset-two-factor');
+            Route::delete('/{user}', [UserController::class, 'destroy'])->name('destroy');
+            Route::post('/{user}/wiederherstellen', [UserController::class, 'restore'])->whereNumber('user')->name('restore');
         });
 
         Route::prefix('einladungen')->name('invitations.')->group(function () {
@@ -53,6 +60,8 @@ Route::prefix('administration')->name('admin.')->group(function () {
     Route::middleware('permission:admin.settings')->group(function () {
         Route::get('/einstellungen', [SettingController::class, 'index'])->name('settings.index');
         Route::put('/einstellungen', [SettingController::class, 'update'])->name('settings.update');
+        Route::post('/einstellungen/testmail', [SettingController::class, 'sendTestMail'])
+            ->middleware('throttle:5,1')->name('settings.test-mail');
 
         // Systemstatus (Abschnitt 136)
         Route::get('/systemstatus', [SystemStatusController::class, 'index'])->name('status');

@@ -118,6 +118,14 @@
             </div>
         </div>
 
+        <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" name="notify_user" value="1" id="notify_user"
+                   @checked(old('notify_user'))>
+            <label class="form-check-label" for="notify_user">
+                Benutzer über Änderungen an Rollen, Anmeldeadresse oder Kontostatus per E-Mail informieren
+            </label>
+        </div>
+
         <div class="d-flex gap-2 mb-4">
             <button class="btn btn-primary">Speichern</button>
             <a href="{{ route('admin.users.index') }}" class="btn btn-outline-secondary">Abbrechen</a>

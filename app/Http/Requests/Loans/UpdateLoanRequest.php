@@ -52,6 +52,7 @@ class UpdateLoanRequest extends LoansFormRequest
                 'between:'.InterestDueDayMode::FIXED_DAY_MIN.','.InterestDueDayMode::FIXED_DAY_MAX,
                 Rule::requiredIf(fn () => $this->input('interest_due_day_mode') === InterestDueDayMode::FixedDay->value),
             ],
+            'interest_due_month' => ['nullable', 'integer', 'between:1,12'],
             'repayment_model' => ['required', Rule::enum(RepaymentModel::class)],
             // Verzugszinsen (Abschnitt 44): nur fachliche Vorgaben, keine Vorbelegung
             'default_interest_enabled' => ['nullable', 'boolean'],

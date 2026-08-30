@@ -192,6 +192,23 @@
                 @error('interest_due_day')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
             <div class="col-md-4">
+                <label class="form-label" for="interest_due_month">
+                    Fälligkeitsmonat
+                    <x-help-icon text="Nur bei quartalsweiser, halbjährlicher oder jährlicher Zinsfälligkeit. Damit lässt sich zum Beispiel 'jährlich zum 31.12.' vereinbaren, unabhängig davon, in welchem Monat das Darlehen beginnt. Ohne Angabe richtet sich der Monat nach dem Wirkungsbeginn." />
+                </label>
+                @php($monate = [1 => 'Januar', 2 => 'Februar', 3 => 'März', 4 => 'April', 5 => 'Mai', 6 => 'Juni', 7 => 'Juli', 8 => 'August', 9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Dezember'])
+                <select id="interest_due_month" name="interest_due_month"
+                        class="form-select @error('interest_due_month') is-invalid @enderror">
+                    <option value="">nach Wirkungsbeginn</option>
+                    @foreach ($monate as $nummer => $name)
+                        <option value="{{ $nummer }}" @selected((string) old('interest_due_month', $loan->interest_due_month) === (string) $nummer)>
+                            {{ $name }}
+                        </option>
+                    @endforeach
+                </select>
+                @error('interest_due_month')<div class="invalid-feedback">{{ $message }}</div>@enderror
+            </div>
+            <div class="col-md-4">
                 <div class="form-check mt-4">
                     <input type="hidden" name="interest_capitalization" value="0">
                     <input type="checkbox" id="interest_capitalization" name="interest_capitalization" value="1"

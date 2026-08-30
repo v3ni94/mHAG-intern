@@ -165,6 +165,101 @@ class EngineInterestDueDayTest extends EngineTestCase
         ], $this->interestRows($loan));
     }
 
+    public function test_jaehrlich_zum_31_12_unabhaengig_vom_beginn(): void
+    {
+        // Fachlicher Regelfall: "Zinsen jährlich zum 31.12. fällig".
+        // Wirkungsbeginn 10.03.2026, Fälligkeitsmonat Dezember, Monatsletzter.
+        // Erste Periode 10.03.2026 bis 31.12.2026 = 297 Tage
+        // (22 Tage März + 275 Tage April bis Dezember).
+        $loan = $this->planLoan([
+            'effective_from' => '2026-03-10',
+            'contract_end' => '2027-12-31',
+            'interest_frequency' => 'annual',
+            'interest_due_day_mode' => 'month_end',
+            'interest_due_month' => 12,
+        ], '2026-03-10');
+
+        $this->assertSame([
+            // 297 Tage * 16,438356164 = 4.882,191... = 4.882,19
+            ['2026-12-31', '4882.19'],
+            // 01.01.2027 bis 31.12.2027 = 365 Tage = 6.000,00
+            ['2027-12-31', '6000.00'],
+        ], $this->interestRows($loan));
+    }
+
+    public function test_jaehrlich_zum_15_12_mit_festem_tag(): void
+    {
+        // Fälligkeitsmonat Dezember, fester Tag 15.
+        // Erste Periode 10.03.2026 bis 15.12.2026 = 281 Tage.
+        $loan = $this->planLoan([
+            'effective_from' => '2026-03-10',
+            'contract_end' => '2027-12-31',
+            'interest_frequency' => 'annual',
+            'interest_due_day_mode' => 'fixed_day',
+            'interest_due_day' => 15,
+            'interest_due_month' => 12,
+        ], '2026-03-10');
+
+        $zeilen = $this->interestRows($loan);
+        $this->assertSame('2026-12-15', $zeilen[0][0]);
+        $this->assertSame('2027-12-15', $zeilen[1][0]);
+        // 281 Tage * 16,438356164 = 4.619,178... = 4.619,18
+        $this->assertSame('4619.18', $zeilen[0][1]);
+    }
+
+    public function test_quartalsweise_mit_faelligkeitsmonat_dezember(): void
+    {
+        // Ankermonat Dezember bei Quartalsrhythmus ergibt die Quartale
+        // März, Juni, September, Dezember.
+        $loan = $this->planLoan([
+            'effective_from' => '2026-01-01',
+            'contract_end' => '2026-12-31',
+            'interest_frequency' => 'quarterly',
+            'interest_due_day_mode' => 'month_end',
+            'interest_due_month' => 12,
+        ], '2026-01-01');
+
+        $this->assertSame(
+            ['2026-03-31', '2026-06-30', '2026-09-30', '2026-12-31'],
+            array_column($this->interestRows($loan), 0),
+        );
+    }
+
+    public function test_faelligkeitsmonat_wirkt_nicht_bei_monatlicher_faelligkeit(): void
+    {
+        // Bei monatlicher Zinsfälligkeit hat ein Fälligkeitsmonat keine
+        // Bedeutung; die Angabe darf das Raster nicht verändern.
+        $loan = $this->planLoan([
+            'contract_end' => '2026-03-31',
+            'interest_due_day_mode' => 'month_end',
+            'interest_due_month' => 12,
+        ], '2026-01-01');
+
+        $this->assertSame(
+            ['2026-01-31', '2026-02-28', '2026-03-31'],
+            array_column($this->interestRows($loan), 0),
+        );
+    }
+
+    public function test_faelligkeitsmonat_ohne_tagesvorgabe_bleibt_ohne_wirkung(): void
+    {
+        // Ohne festen Tag und ohne Monatsletzten bleibt es beim Raster aus dem
+        // Wirkungsbeginn; ein Fälligkeitsmonat allein ergibt keine Vorgabe.
+        $loan = $this->planLoan([
+            'effective_from' => '2026-03-10',
+            'contract_end' => '2027-03-31',
+            'interest_frequency' => 'annual',
+            'interest_due_month' => 12,
+        ], '2026-03-10');
+
+        // Raster aus dem Wirkungsbeginn: 10.03.2026 bis 09.03.2027, danach die
+        // Stummelperiode bis zum Vertragsende.
+        $this->assertSame(
+            ['2027-03-09', '2027-03-31'],
+            array_column($this->interestRows($loan), 0),
+        );
+    }
+
     public function test_fester_tag_ohne_erfassten_tag_faellt_auf_standard_zurueck(): void
     {
         // Unvollständige Vorgabe darf nicht geraten werden und darf die

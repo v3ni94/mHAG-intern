@@ -47,7 +47,23 @@ offen bliebe, welcher Zeitraum zu welcher Fälligkeit gehört:
   Zins und Tilgung einer Periode am gleichen Tag fällig werden. Endfällige
   Tilgung bleibt am Vertragsende.
 
-Belegt durch `tests/Feature/Loans/EngineInterestDueDayTest.php` (9 Tests) und
+**Ergänzung vom 30.08.2026: Fälligkeitsmonat.** Mit Tag und Modus allein
+richtet sich der Monat der Fälligkeit bei jährlicher, halbjährlicher und
+quartalsweiser Zinsfälligkeit nach dem Wirkungsbeginn. Eine Vereinbarung wie
+"Zinsen jährlich zum 31.12." ist damit nicht darstellbar, wenn das Darlehen
+nicht im Dezember beginnt. Deshalb neu:
+
+- `interest_due_month` (1 bis 12, nullable): Ankermonat des
+  Fälligkeitsrasters. Wirkt nur bei einer Zinsfälligkeit von drei Monaten und
+  mehr und nur zusammen mit `fixed_day` oder `month_end`. Ohne Angabe bleibt
+  das bisherige Verhalten.
+- Beispiel: Wirkungsbeginn 10.03.2026, jährlich, Monatsletzter,
+  Fälligkeitsmonat Dezember. Erste Periode 10.03. bis 31.12.2026 (297 Tage,
+  4.882,19 EUR), danach jeweils Kalenderjahre zum 31.12.
+- Bei Quartalsrhythmus verankert der Monat das Raster: Ankermonat Dezember
+  ergibt März, Juni, September, Dezember.
+
+Belegt durch `tests/Feature/Loans/EngineInterestDueDayTest.php` (14 Tests) und
 drei Formulartests in `tests/Feature/Loans/UiLoanCrudTest.php`.
 
 ## 2. Zinskapitalisierung

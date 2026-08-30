@@ -188,12 +188,18 @@ class LoanScheduleService
      * die Zinsen werden taggenau gerechnet, nur der Faelligkeitstag ist
      * vorgegeben.
      *
+     * Zusaetzlich kann bei einer Zinsfaelligkeit von drei Monaten und mehr ein
+     * Faelligkeitsmonat vorgegeben werden (interest_due_month). Erst damit
+     * laesst sich eine Vereinbarung wie "jaehrlich zum 31.12." darstellen,
+     * unabhaengig davon, in welchem Monat das Darlehen beginnt.
+     *
      * @return \Generator<int, Carbon>
      */
     protected function dueDateGrid(Loan $loan, int $months, Carbon $start): \Generator
     {
         $mode = $loan->interest_due_day_mode ?? InterestDueDayMode::EffectiveFrom;
         $fixedDay = (int) ($loan->interest_due_day ?? 0);
+        $dueMonth = (int) ($loan->interest_due_month ?? 0);
 
         // Fester Tag ohne erfassten Tag: kein Raten, es bleibt beim Standard.
         if ($mode === InterestDueDayMode::FixedDay
@@ -201,11 +207,20 @@ class LoanScheduleService
             $mode = InterestDueDayMode::EffectiveFrom;
         }
 
-        $first = match ($mode) {
-            InterestDueDayMode::MonthEnd => $start->copy()->endOfMonth()->startOfDay(),
-            InterestDueDayMode::FixedDay => $this->firstFixedDayDue($start, $fixedDay, $months),
-            InterestDueDayMode::EffectiveFrom => $start->copy()->addMonthsNoOverflow($months)->subDay(),
-        };
+        // Der Faelligkeitsmonat wirkt nur bei mehrmonatigen Perioden und nur
+        // zusammen mit einem festen Tag oder dem Monatsletzten; beim Raster
+        // aus dem Wirkungsbeginn hat er keine Bedeutung.
+        $useDueMonth = $months >= 3
+            && $dueMonth >= 1 && $dueMonth <= 12
+            && $mode !== InterestDueDayMode::EffectiveFrom;
+
+        $first = $useDueMonth
+            ? $this->firstDueInMonthGrid($start, $months, $dueMonth, $mode, $fixedDay)
+            : match ($mode) {
+                InterestDueDayMode::MonthEnd => $start->copy()->endOfMonth()->startOfDay(),
+                InterestDueDayMode::FixedDay => $this->firstFixedDayDue($start, $fixedDay, $months),
+                InterestDueDayMode::EffectiveFrom => $start->copy()->addMonthsNoOverflow($months)->subDay(),
+            };
 
         for ($k = 0; $k < 1200; $k++) {
             yield $mode === InterestDueDayMode::MonthEnd
@@ -226,6 +241,37 @@ class LoanScheduleService
         }
 
         return $first;
+    }
+
+    /**
+     * Erster Faelligkeitstag eines Rasters, das im vorgegebenen
+     * Faelligkeitsmonat verankert ist. Gesucht wird der erste Rastertag, der
+     * nicht vor dem Wirkungsbeginn liegt; begonnen wird ein Jahr davor, damit
+     * auch Quartals- und Halbjahresraster sicher getroffen werden.
+     */
+    protected function firstDueInMonthGrid(
+        Carbon $start,
+        int $months,
+        int $dueMonth,
+        InterestDueDayMode $mode,
+        int $fixedDay,
+    ): Carbon {
+        $base = Carbon::createFromDate($start->year - 1, $dueMonth, 1)->startOfDay();
+        $steps = (int) ceil(12 / $months) + 2;
+
+        for ($k = 0; $k <= $steps; $k++) {
+            $monthStart = $base->copy()->addMonthsNoOverflow($months * $k);
+            $due = $mode === InterestDueDayMode::MonthEnd
+                ? $monthStart->copy()->endOfMonth()->startOfDay()
+                : $monthStart->copy()->day($fixedDay);
+
+            if ($due->gte($start)) {
+                return $due;
+            }
+        }
+
+        // Rechnerisch nicht erreichbar; als Rueckfall das bisherige Verhalten.
+        return $start->copy()->addMonthsNoOverflow($months)->subDay();
     }
 
     /** @return array<int, array{0: RepaymentItemType, 1: string, 2: string}> */

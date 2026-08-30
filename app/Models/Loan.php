@@ -35,6 +35,7 @@ class Loan extends Model
             // Fälligkeitstag der Zinsperioden; Standard = bisheriges Verhalten
             'interest_due_day_mode' => \App\Enums\InterestDueDayMode::class,
             'interest_due_day' => 'integer',
+            'interest_due_month' => 'integer',
             // Zinskapitalisierung: Zuschreibung auf den valutierten Betrag
             'interest_capitalization' => 'boolean',
             'interest_capitalization_from' => 'date',

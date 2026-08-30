@@ -8,12 +8,12 @@ use Tests\TestCase;
 class ExampleTest extends TestCase
 {
     /**
-     * A basic test example.
+     * Unangemeldete Besucher werden zum Login geleitet, die Wurzel
+     * leitet designgemaess auf das Dashboard um.
      */
-    public function test_the_application_returns_a_successful_response(): void
+    public function test_the_application_redirects_guests_to_login(): void
     {
-        $response = $this->get('/');
-
-        $response->assertStatus(200);
+        $this->get('/')->assertRedirect();
+        $this->get('/login')->assertStatus(200);
     }
 }

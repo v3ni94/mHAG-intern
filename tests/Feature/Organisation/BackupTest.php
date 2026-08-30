@@ -23,18 +23,14 @@ class BackupTest extends OrganisationTestCase
         File::ensureDirectoryExists($base);
         file_put_contents($this->dbFile, 'sqlite-testinhalt');
 
-        // BackupService liest BACKUP_PATH aus der Umgebung
-        putenv('BACKUP_PATH='.$this->backupDir);
-        $_ENV['BACKUP_PATH'] = $this->backupDir;
-        $_SERVER['BACKUP_PATH'] = $this->backupDir;
+        // BackupService liest den Ablageort aus der Konfiguration
+        config()->set('backup.path', $this->backupDir);
 
         config()->set('database.connections.sqlite.database', $this->dbFile);
     }
 
     protected function tearDown(): void
     {
-        putenv('BACKUP_PATH');
-        unset($_ENV['BACKUP_PATH'], $_SERVER['BACKUP_PATH']);
         File::deleteDirectory(dirname($this->backupDir));
 
         parent::tearDown();

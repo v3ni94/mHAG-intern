@@ -102,7 +102,12 @@ class BackupService
 
     public function backupPath(): string
     {
-        return rtrim((string) (env('BACKUP_PATH') ?: storage_path('backups')), DIRECTORY_SEPARATOR);
+        $path = (string) config('backup.path', 'storage/backups');
+        if (! str_starts_with($path, DIRECTORY_SEPARATOR)) {
+            $path = base_path($path);
+        }
+
+        return rtrim($path, DIRECTORY_SEPARATOR);
     }
 
     /** Vollständigen Pfad einer vorhandenen Backup-Datei liefern (nur Dateiname, kein Traversal). */

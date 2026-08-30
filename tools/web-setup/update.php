@@ -6,8 +6,9 @@
  * ===========================================================================
  *
  * Zweck: Nach dem Hochladen geänderter Anwendungsdateien werden die
- * Zwischenspeicher geleert, neue Datenbankänderungen eingespielt und die
- * Anwendung wieder für den Produktivbetrieb optimiert.
+ * Zwischenspeicher geleert, neue Datenbankänderungen eingespielt, bei
+ * Bedarf Rollen und Berechtigungen eingelesen und die Anwendung wieder für
+ * den Produktivbetrieb optimiert.
  *
  * ABGRENZUNG ZUM SETUP
  * Dieses Skript legt KEINE Datenbank neu an, führt KEINE Startdaten ein und
@@ -177,6 +178,26 @@ if ($action === 'migrate' && $app !== null) {
     }
 }
 
+if ($action === 'roles' && $app !== null) {
+    @set_time_limit(120);
+    try {
+        /*
+         * Rollen und Berechtigungen einlesen. Der Seeder arbeitet mit
+         * findOrCreate und syncPermissions: vorhandene Rollen bleiben
+         * erhalten, neue kommen hinzu. Es werden KEINE Fachdaten angelegt.
+         */
+        Illuminate\Support\Facades\Artisan::call('db:seed', [
+            '--class' => 'Database\\Seeders\\RolePermissionSeeder',
+            '--force' => true,
+        ]);
+        $output = Illuminate\Support\Facades\Artisan::output();
+        $messages[] = ['ok', 'Rollen und Berechtigungen wurden eingelesen. Bestehende Zuordnungen bleiben erhalten.'];
+        $messages[] = ['pre', trim($output) !== '' ? $output : 'Rollen aktualisiert.'];
+    } catch (Throwable $e) {
+        $messages[] = ['error', 'Das Einlesen der Rollen ist fehlgeschlagen: '.$e->getMessage()];
+    }
+}
+
 if ($action === 'optimize' && $app !== null) {
     try {
         foreach (['config:cache', 'route:cache', 'view:cache'] as $command) {
@@ -302,6 +323,16 @@ $tokenEscaped = htmlspecialchars($token, ENT_QUOTES);
                 <input type="hidden" name="token" value="<?= $tokenEscaped ?>">
                 <input type="hidden" name="action" value="migrate">
                 <button type="submit" <?= $app === null ? 'disabled' : '' ?>>Änderungen einspielen</button>
+            </form>
+        </li>
+        <li>
+            <strong>Rollen und Berechtigungen einlesen.</strong> Nur nötig, wenn eine Aktualisierung neue
+            Rollen oder Berechtigungen mitbringt. Bestehende Zuordnungen bleiben erhalten, es werden keine
+            Fachdaten angelegt.
+            <form method="post">
+                <input type="hidden" name="token" value="<?= $tokenEscaped ?>">
+                <input type="hidden" name="action" value="roles">
+                <button type="submit" <?= $app === null ? 'disabled' : '' ?>>Rollen einlesen</button>
             </form>
         </li>
         <li>

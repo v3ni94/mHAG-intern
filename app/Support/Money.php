@@ -121,23 +121,149 @@ final class Money
     }
 
     /**
-     * Deutsche Eingabe ("1.234,56") in Dezimal-String wandeln.
+     * Deutsche Eingabe in einen Dezimalstring wandeln.
+     *
+     * Grundsatz: Im Zweifel NICHTS zurückgeben. Ein null führt in den
+     * Formularen zu einer Fehlermeldung; eine stillschweigend andere Zahl wäre
+     * ein falscher Betrag in den Büchern und damit der schwerere Fehler.
+     *
+     * Erkannt wird:
+     *   "1.234,56"    -> 1234.56   Punkt als Tausender, Komma als Dezimalzeichen
+     *   "25.000"      -> 25000.00  reine Tausendergruppierung, deutsche Schreibweise
+     *   "1.234.567"   -> 1234567.00
+     *   "1234,56"     -> 1234.56
+     *   "1234.56"     -> 1234.56   Punkt als Dezimalzeichen, wenn keine
+     *                              Tausendergruppierung vorliegt
+     *   "25"          -> 25.00
+     *
+     * Abgelehnt wird (Rückgabe null):
+     *   "12.3456" bei $scale = 2   mehr Nachkommastellen als das Feld führt.
+     *                              Früher wurde hier stillschweigend auf 12,34
+     *                              gekürzt.
+     *   "1.23.456"                 keine deutbare Schreibweise
+     *   "abc", "12,34,56"
+     *
+     * Das Verhalten bei "25.000" ist bewusst festgelegt: In der deutschen
+     * Oberfläche bedeutet diese Eingabe fünfundzwanzigtausend. Zuvor ergab sie
+     * 25,00 EUR, also einen um den Faktor 1000 falschen Betrag.
+     *
+     * @param  int  $scale  Nachkommastellen des Zielfeldes. Für Beträge 2, für
+     *                      Kurse je Aktie 4, für Quoten und Zinssätze 6.
      */
-    public static function parse(?string $input): ?string
+    public static function parse(?string $input, int $scale = self::SCALE): ?string
     {
         if ($input === null || trim($input) === '') {
             return null;
         }
-        $s = trim(str_replace([' ', "\u{a0}", 'EUR', '€'], '', $input));
-        if (str_contains($s, ',')) {
-            $s = str_replace('.', '', $s);
-            $s = str_replace(',', '.', $s);
+
+        $s = trim(str_replace([' ', "\u{a0}", "'", 'EUR', '€'], '', $input));
+
+        $negativ = str_starts_with($s, '-');
+        if ($negativ || str_starts_with($s, '+')) {
+            $s = substr($s, 1);
         }
-        if (! preg_match('/^-?\d+(\.\d+)?$/', $s)) {
+
+        if (str_contains($s, ',')) {
+            // Komma vorhanden: es ist das Dezimalzeichen, Punkte sind
+            // Tausendertrenner. Genau ein Komma ist zulaessig.
+            if (substr_count($s, ',') > 1) {
+                return null;
+            }
+            [$ganz, $dezimal] = explode(',', $s, 2);
+            if (! self::istGanzzahlMitTausendern($ganz)) {
+                return null;
+            }
+            $ganz = str_replace('.', '', $ganz);
+        } elseif (preg_match('/^\d{1,3}(\.\d{3})+$/', $s) === 1) {
+            // Reine Tausendergruppierung ohne Dezimalstellen.
+            $ganz = str_replace('.', '', $s);
+            $dezimal = '';
+        } elseif (preg_match('/^(\d+)(?:\.(\d+))?$/', $s, $treffer) === 1) {
+            // Punkt als Dezimalzeichen, oder gar kein Trennzeichen.
+            $ganz = $treffer[1];
+            $dezimal = $treffer[2] ?? '';
+        } else {
             return null;
         }
 
-        return self::normalize($s);
+        if ($dezimal !== '' && preg_match('/^\d+$/', $dezimal) !== 1) {
+            return null;
+        }
+
+        // Mehr Nachkommastellen als das Zielfeld fuehrt: ablehnen statt kuerzen.
+        if (strlen(rtrim($dezimal, '0')) > $scale) {
+            return null;
+        }
+
+        $wert = ($negativ ? '-' : '').$ganz.($dezimal === '' ? '' : '.'.$dezimal);
+
+        return self::normalize($wert, $scale);
+    }
+
+    /**
+     * Deutsche Prozent- oder Quoteneingabe in einen Dezimalstring wandeln.
+     *
+     * Bewusst NICHT dieselbe Regel wie bei Beträgen: Bei einem Prozentsatz ist
+     * "3.125" als 3,125 zu lesen, nicht als dreitausendeinhundertfünfundzwanzig.
+     * Ein Punkt ist hier also stets das Dezimalzeichen, es sei denn, ein Komma
+     * ist vorhanden; dann sind Punkte Tausendertrenner.
+     *
+     * Mehr Nachkommastellen als das Zielfeld führt: Rückgabe null, damit die
+     * Validierung es beanstandet, statt die Datenbank stillschweigend zu kürzen.
+     *
+     * @param  int  $scale  Nachkommastellen des Zielfeldes, Vorgabe 6
+     *                      (Zinssätze und Quoten liegen als DECIMAL(9,6)).
+     */
+    public static function parsePercent(?string $input, int $scale = 6): ?string
+    {
+        if ($input === null || trim($input) === '') {
+            return null;
+        }
+
+        $s = trim(str_replace([' ', "\u{a0}", '%', "'"], '', $input));
+
+        $negativ = str_starts_with($s, '-');
+        if ($negativ || str_starts_with($s, '+')) {
+            $s = substr($s, 1);
+        }
+
+        if (str_contains($s, ',')) {
+            if (substr_count($s, ',') > 1) {
+                return null;
+            }
+            [$ganz, $dezimal] = explode(',', $s, 2);
+            if (! self::istGanzzahlMitTausendern($ganz)) {
+                return null;
+            }
+            $ganz = str_replace('.', '', $ganz);
+        } elseif (preg_match('/^(\d+)(?:\.(\d+))?$/', $s, $treffer) === 1) {
+            $ganz = $treffer[1];
+            $dezimal = $treffer[2] ?? '';
+        } else {
+            return null;
+        }
+
+        if ($dezimal !== '' && preg_match('/^\d+$/', $dezimal) !== 1) {
+            return null;
+        }
+        if (strlen(rtrim($dezimal, '0')) > $scale) {
+            return null;
+        }
+
+        return ($negativ ? '-' : '').$ganz.($dezimal === '' ? '' : '.'.$dezimal);
+    }
+
+    /** Ganzzahliger Teil, entweder ohne Punkte oder als saubere Tausendergruppierung. */
+    private static function istGanzzahlMitTausendern(string $teil): bool
+    {
+        if ($teil === '') {
+            return false;
+        }
+        if (preg_match('/^\d+$/', $teil) === 1) {
+            return true;
+        }
+
+        return preg_match('/^\d{1,3}(\.\d{3})+$/', $teil) === 1;
     }
 
     public static function normalize(string|int|float|null $value, int $scale = self::SCALE): string

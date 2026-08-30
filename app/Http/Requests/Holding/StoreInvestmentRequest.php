@@ -2,7 +2,8 @@
 
 namespace App\Http\Requests\Holding;
 
-use App\Support\Money;
+use App\Http\Requests\Concerns\ParstDeutscheBetraege;
+use Illuminate\Validation\Validator;
 
 /**
  * Beteiligung anlegen/bearbeiten (Abschnitt 84). Der aktuelle interne Wert
@@ -10,22 +11,24 @@ use App\Support\Money;
  */
 class StoreInvestmentRequest extends HoldingFormRequest
 {
+    use ParstDeutscheBetraege;
+
     protected function prepareForValidation(): void
     {
-        $percentage = $this->input('share_percentage');
-        if (is_string($percentage) && $percentage !== '') {
-            $percentage = str_replace([' ', '%'], '', $percentage);
-            if (str_contains($percentage, ',')) {
-                $percentage = str_replace('.', '', $percentage);
-                $percentage = str_replace(',', '.', $percentage);
-            }
+        if (is_string($this->input('share_percentage'))) {
+            $this->merge([
+                'share_percentage' => str_replace([' ', '%'], '', (string) $this->input('share_percentage')),
+            ]);
         }
 
-        $this->merge([
-            'share_percentage' => $percentage === '' ? null : $percentage,
-            'acquisition_cost' => Money::parse($this->input('acquisition_cost')),
-            'current_value' => Money::parse($this->input('current_value')),
-        ]);
+        // Beteiligungsquote fuehrt sechs Nachkommastellen (DECIMAL(9,6)).
+        $this->parstProzent('share_percentage', 6);
+        $this->parstBetraege(['acquisition_cost', 'current_value'], 2);
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(fn (Validator $v) => $this->betragsfehlerMelden($v));
     }
 
     public function rules(): array

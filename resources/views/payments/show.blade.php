@@ -95,7 +95,9 @@
                         <tbody>
                             @forelse ($payment->allocations as $allocation)
                                 <tr>
-                                    <td>{{ \App\Enums\AllocationBucket::tryFrom($allocation->bucket)?->label() ?? $allocation->bucket }}</td>
+                                    {{-- bucket ist im Modell auf das Enum gecastet. Ein tryFrom
+                                         darauf wirft einen TypeError und nahm die ganze Seite mit. --}}
+                                    <td>{{ $allocation->bucket?->label() ?? '' }}</td>
                                     <td class="text-end"><x-money :amount="$allocation->amount" /></td>
                                     <td class="small text-muted">
                                         @if ($allocation->repaymentPlanItem)

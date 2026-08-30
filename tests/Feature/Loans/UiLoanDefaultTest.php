@@ -72,6 +72,72 @@ class UiLoanDefaultTest extends LoansUiTestCase
         ]);
     }
 
+    public function test_nicht_deutbarer_abschreibungsbetrag_wird_beanstandet(): void
+    {
+        /*
+         * Befund vom 30.08.2026: Money::parse gab bei einer nicht deutbaren
+         * Eingabe null zurueck, und dieses null wurde in die Anfrage gemergt.
+         * Die Regel lautet "nullable", der Vorgang lief also durch: Status
+         * gewechselt, Abschreibung nicht gebucht, keine Meldung. Die Forderung
+         * blieb in voller Hoehe stehen und wirkte so in Forderungsaufstellung,
+         * Kennzahlen und Verzugszinsgrundlage weiter.
+         */
+        $this->mockLoanServices();
+        $user = $this->makeInternalUser();
+        $loan = $this->makeDisbursedLoan();
+
+        $response = $this->actingAs($user)->post(route('loans.default.record', $loan), [
+            'defaulted_on' => '2026-05-15',
+            'reason' => 'Insolvenzantrag gestellt',
+            'write_off_amount' => '25.000,-',
+        ]);
+
+        $response->assertSessionHasErrors('write_off_amount');
+        $this->assertNull($loan->fresh()->defaulted_on,
+            'Der Ausfall darf nicht erfasst werden, wenn die Abschreibung nicht lesbar ist.');
+        $this->assertDatabaseMissing('loan_transactions', [
+            'loan_id' => $loan->id,
+            'booking_type' => 'write_off',
+        ]);
+    }
+
+    public function test_abschreibungsbetrag_mit_zu_vielen_nachkommastellen_wird_beanstandet(): void
+    {
+        $this->mockLoanServices();
+        $user = $this->makeInternalUser();
+        $loan = $this->makeDisbursedLoan();
+
+        $response = $this->actingAs($user)->post(route('loans.default.record', $loan), [
+            'defaulted_on' => '2026-05-15',
+            'reason' => 'Insolvenzantrag gestellt',
+            'write_off_amount' => '25000,123',
+        ]);
+
+        $response->assertSessionHasErrors('write_off_amount');
+        $this->assertNull($loan->fresh()->defaulted_on);
+    }
+
+    public function test_abschreibungsbetrag_mit_tausendertrenner_ohne_komma(): void
+    {
+        // "25.000" bedeutet fuenfundzwanzigtausend. Frueher wurden daraus
+        // 25,00 EUR gebucht, ein um den Faktor 1000 falscher Betrag.
+        Carbon::setTestNow(Carbon::parse('2026-08-30 09:00:00'));
+        $user = $this->makeInternalUser();
+        $loan = $this->makeDisbursedLoan();
+
+        $this->actingAs($user)->post(route('loans.default.record', $loan), [
+            'defaulted_on' => '2026-05-15',
+            'reason' => 'Insolvenzantrag gestellt',
+            'write_off_amount' => '25.000',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('loan_transactions', [
+            'loan_id' => $loan->id,
+            'booking_type' => 'write_off',
+            'amount' => '-25000.00',
+        ]);
+    }
+
     public function test_erfassung_verlangt_einen_grund(): void
     {
         $this->mockLoanServices();

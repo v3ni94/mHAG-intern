@@ -2,8 +2,9 @@
 
 namespace App\Http\Requests\Loans;
 
-use App\Support\Money;
+use App\Http\Requests\Concerns\ParstDeutscheBetraege;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 /**
  * Ausfall erfassen (Anforderung vom 30.08.2026).
@@ -14,11 +15,19 @@ use Illuminate\Foundation\Http\FormRequest;
  */
 class RecordLoanDefaultRequest extends FormRequest
 {
+    use ParstDeutscheBetraege;
+
     protected function prepareForValidation(): void
     {
-        if ($this->filled('write_off_amount')) {
-            $this->merge(['write_off_amount' => Money::parse((string) $this->input('write_off_amount'))]);
-        }
+        // Frueher wurde eine nicht deutbare Eingabe zu null. Da die Regel
+        // "nullable" lautet, wurde der Ausfall erfasst und die Abschreibung
+        // stillschweigend weggelassen.
+        $this->parstBetrag('write_off_amount', 2);
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(fn (Validator $v) => $this->betragsfehlerMelden($v));
     }
 
     public function rules(): array

@@ -3,12 +3,14 @@
 namespace App\Http\Requests\MasterData;
 
 use App\Enums\RelationshipType;
-use App\Support\Money;
+use App\Http\Requests\Concerns\ParstDeutscheBetraege;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class EntityRelationshipRequest extends EntitySubResourceRequest
 {
+    use ParstDeutscheBetraege;
+
     protected function prepareForValidation(): void
     {
         $this->normalizeEmptyToNull([
@@ -16,12 +18,9 @@ class EntityRelationshipRequest extends EntitySubResourceRequest
         ]);
 
         // Deutsche Dezimaleingabe (z. B. "25,5") in Punktnotation wandeln.
-        if ($this->filled('share_percentage')) {
-            $parsed = Money::parse((string) $this->input('share_percentage'));
-            if ($parsed !== null) {
-                $this->merge(['share_percentage' => $parsed]);
-            }
-        }
+        // Sechs Nachkommastellen, wie die Spalte (DECIMAL(9,6)). Mit der
+        // Vorgabe von zwei Stellen wurde 33,333333 zu 33,33.
+        $this->parstProzent('share_percentage', 6);
     }
 
     public function rules(): array
@@ -43,6 +42,8 @@ class EntityRelationshipRequest extends EntitySubResourceRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $v) {
+            $this->betragsfehlerMelden($v);
+
             if ((int) $this->input('entity_b_id') === (int) $this->entity()->id) {
                 $v->errors()->add('entity_b_id', 'Ein Unternehmen kann nicht mit sich selbst verbunden werden.');
             }

@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests\Loans;
 
+use App\Http\Requests\Concerns\ParstDeutscheBetraege;
 use App\Support\Money;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 /**
  * Gemeinsame Basis der Darlehens-FormRequests: deutsche Fehlermeldungen,
@@ -12,6 +14,8 @@ use Illuminate\Foundation\Http\FormRequest;
  */
 abstract class LoansFormRequest extends FormRequest
 {
+    use ParstDeutscheBetraege;
+
     /** Felder, die als Geldbetrag geparst werden (Money::parse, 2 Nachkommastellen). */
     protected array $moneyFields = [];
 
@@ -20,22 +24,26 @@ abstract class LoansFormRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $converted = [];
-        foreach ($this->moneyFields as $field) {
-            if ($this->filled($field)) {
-                $parsed = Money::parse((string) $this->input($field));
-                $converted[$field] = $parsed ?? $this->input($field);
-            }
-        }
-        foreach ($this->percentFields as $field) {
-            if ($this->filled($field)) {
-                $parsed = static::parsePercent((string) $this->input($field));
-                $converted[$field] = $parsed ?? $this->input($field);
-            }
-        }
-        if ($converted !== []) {
-            $this->merge($converted);
-        }
+        /*
+         * Der Rohwert bleibt bei nicht deutbarer Eingabe stehen und wird
+         * ausdruecklich beanstandet. Frueher genuegte die Regel "numeric",
+         * die aber eine Zahl mit zu vielen Nachkommastellen durchlaesst;
+         * die Datenbank kuerzte dann stillschweigend.
+         */
+        $this->parstBetraege($this->moneyFields, Money::SCALE);
+        $this->parstProzente($this->percentFields, 6);
+    }
+
+    /**
+     * Beanstandungen aus der Betragsumwandlung melden.
+     *
+     * Unterklassen mit eigenem withValidator() muessen
+     * $this->betragsfehlerMelden($validator) selbst aufrufen; sonst
+     * ueberschreiben sie diese Meldung.
+     */
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(fn (Validator $v) => $this->betragsfehlerMelden($v));
     }
 
     /**
@@ -44,19 +52,7 @@ abstract class LoansFormRequest extends FormRequest
      */
     public static function parsePercent(?string $input): ?string
     {
-        if ($input === null || trim($input) === '') {
-            return null;
-        }
-        $s = trim(str_replace([' ', "\u{a0}", '%'], '', $input));
-        if (str_contains($s, ',')) {
-            $s = str_replace('.', '', $s);
-            $s = str_replace(',', '.', $s);
-        }
-        if (! preg_match('/^-?\d+(\.\d+)?$/', $s)) {
-            return null;
-        }
-
-        return $s;
+        return Money::parsePercent($input, 6);
     }
 
     public function messages(): array

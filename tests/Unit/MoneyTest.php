@@ -68,6 +68,65 @@ class MoneyTest extends TestCase
         $this->assertNull(Money::parse('keine Zahl'));
     }
 
+    public function test_tausendertrenner_ohne_dezimalstellen_wird_richtig_gelesen(): void
+    {
+        /*
+         * Der schwerste Fehler an dieser Stelle: "25.000" ergab 25,00 EUR,
+         * also einen um den Faktor 1000 falschen Betrag. In einer deutschen
+         * Oberflaeche bedeutet die Eingabe fuenfundzwanzigtausend.
+         */
+        $this->assertSame('25000.00', Money::parse('25.000'));
+        $this->assertSame('1234567.00', Money::parse('1.234.567'));
+        $this->assertSame('1234.00', Money::parse('1.234'));
+        $this->assertSame('-1500.50', Money::parse('-1.500,50'));
+    }
+
+    public function test_punkt_bleibt_dezimalzeichen_wenn_keine_tausendergruppierung_vorliegt(): void
+    {
+        $this->assertSame('25.50', Money::parse('25.5'));
+        $this->assertSame('1000.00', Money::parse('1000.00'));
+        $this->assertSame('0.01', Money::parse('0,01'));
+    }
+
+    public function test_zu_viele_nachkommastellen_werden_abgewiesen_statt_gekuerzt(): void
+    {
+        /*
+         * Vorher wurde stillschweigend gekuerzt: aus 12,3456 wurde 12,34.
+         * Eine Ablehnung fuehrt in den Formularen zu einer Fehlermeldung, ein
+         * gekuerzter Betrag stand dagegen unbemerkt in den Buechern.
+         */
+        $this->assertNull(Money::parse('12.3456'));
+        $this->assertNull(Money::parse('12,3456'));
+        $this->assertNull(Money::parse('1.234,5678'));
+
+        // Mit der Genauigkeit des Zielfeldes ist derselbe Wert zulaessig.
+        $this->assertSame('12.3456', Money::parse('12,3456', 4));
+        $this->assertSame('33.333333', Money::parse('33,333333', 6));
+        $this->assertNull(Money::parse('33,3333333', 6));
+    }
+
+    public function test_nicht_deutbare_eingaben_werden_abgewiesen(): void
+    {
+        foreach (['abc', '12,34,56', '1.23.456', '25.000,-', '--5', '1.2.3'] as $eingabe) {
+            $this->assertNull(Money::parse($eingabe),
+                'Die Eingabe "'.$eingabe.'" darf keinen Betrag ergeben.');
+        }
+    }
+
+    public function test_prozentsatz_liest_den_punkt_als_dezimalzeichen(): void
+    {
+        /*
+         * Andere Regel als bei Betraegen, und das ist beabsichtigt: "3.125"
+         * ist ein Zinssatz von 3,125 Prozent, nicht dreitausend.
+         */
+        $this->assertSame('3.125', Money::parsePercent('3.125'));
+        $this->assertSame('3.125', Money::parsePercent('3,125'));
+        $this->assertSame('6.5', Money::parsePercent('6,5 %'));
+        $this->assertSame('33.333333', Money::parsePercent('33,333333'));
+        $this->assertNull(Money::parsePercent('33,3333333'));
+        $this->assertNull(Money::parsePercent('keine Zahl'));
+    }
+
     public function test_vergleiche_und_summe(): void
     {
         $this->assertSame(1, Money::cmp('100.01', '100.00'));

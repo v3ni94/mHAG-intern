@@ -3,8 +3,9 @@
 namespace App\Http\Requests\Holding;
 
 use App\Enums\ShareTransactionType;
-use App\Support\Money;
+use App\Http\Requests\Concerns\ParstDeutscheBetraege;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 /**
  * Erfassung einer Aktienbewegung (Abschnitt 79). Beträge werden im deutschen
@@ -12,12 +13,19 @@ use Illuminate\Validation\Rule;
  */
 class StoreShareTransactionRequest extends HoldingFormRequest
 {
+    use ParstDeutscheBetraege;
+
     protected function prepareForValidation(): void
     {
-        $this->merge([
-            'price_per_share' => Money::parse($this->input('price_per_share')),
-            'total_price' => Money::parse($this->input('total_price')),
-        ]);
+        // Kurs je Aktie fuehrt vier Nachkommastellen (DECIMAL(18,4)). Mit der
+        // Vorgabe von zwei Stellen wurde 12,3456 stillschweigend zu 12,34.
+        $this->parstBetrag('price_per_share', 4);
+        $this->parstBetrag('total_price', 2);
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(fn (Validator $v) => $this->betragsfehlerMelden($v));
     }
 
     public function rules(): array

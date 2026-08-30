@@ -27,9 +27,25 @@ class LoanDisbursement extends Model
         return $this->belongsTo(Loan::class);
     }
 
+    /**
+     * ÜBERHOLT: einseitige Kontoangabe der ersten Fassung. Bleibt für die
+     * Historie erhalten; gepflegt werden sourceBankAccount und targetBankAccount.
+     */
     public function bankAccount(): BelongsTo
     {
         return $this->belongsTo(BankAccount::class);
+    }
+
+    /** Konto, von dem ausgezahlt wurde (Konto des Darlehensgebers). */
+    public function sourceBankAccount(): BelongsTo
+    {
+        return $this->belongsTo(BankAccount::class, 'source_bank_account_id');
+    }
+
+    /** Konto, auf das ausgezahlt wurde (Konto des Darlehensnehmers). */
+    public function targetBankAccount(): BelongsTo
+    {
+        return $this->belongsTo(BankAccount::class, 'target_bank_account_id');
     }
 
     /** Wirksam ausgezahlter Betrag (IST bzw. Annahme laut Status). */

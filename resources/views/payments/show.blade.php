@@ -32,6 +32,22 @@
                         <dt class="col-4">Betrag</dt><dd class="col-8"><x-money :amount="$payment->amount" /></dd>
                         <dt class="col-4">Richtung</dt><dd class="col-8">{{ $payment->direction === 'incoming' ? 'Eingang' : 'Ausgang' }}</dd>
                         <dt class="col-4">Herkunft</dt><dd class="col-8"><x-origin-badge :origin="$payment->origin" /></dd>
+                        <dt class="col-4">Gezahlt von Konto</dt>
+                        <dd class="col-8">
+                            @include('payments._bank-account', [
+                                'account' => $payment->payerBankAccount ?: $payment->bankAccount,
+                                'canSeeAccounts' => $canSeeAccounts,
+                                'visibleEntityIds' => $visibleEntityIds,
+                            ])
+                        </dd>
+                        <dt class="col-4">Gezahlt auf Konto</dt>
+                        <dd class="col-8">
+                            @include('payments._bank-account', [
+                                'account' => $payment->payeeBankAccount,
+                                'canSeeAccounts' => $canSeeAccounts,
+                                'visibleEntityIds' => $visibleEntityIds,
+                            ])
+                        </dd>
                         <dt class="col-4">Verwendungszweck</dt><dd class="col-8">{{ $payment->purpose ?: 'ohne' }}</dd>
                         <dt class="col-4">Referenz</dt><dd class="col-8">{{ $payment->reference ?: 'ohne' }}</dd>
                         <dt class="col-4">Notiz</dt><dd class="col-8">{{ $payment->note ?: 'ohne' }}</dd>

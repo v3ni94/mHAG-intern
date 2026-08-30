@@ -55,7 +55,7 @@ class PaymentController extends Controller
             'direction' => $request->query('direction'),
         ];
 
-        $payments = Payment::with(['loan', 'payer', 'payee'])
+        $payments = Payment::with(['loan', 'payer', 'payee', 'payerBankAccount', 'payeeBankAccount'])
             ->whereHas('loan', fn ($q) => $q->visibleTo($user))
             ->when($filters['loan_id'], fn ($q, $id) => $q->where('loan_id', $id))
             ->when($filters['from'], fn ($q, $from) => $q->whereDate('payment_date', '>=', $from))
@@ -75,6 +75,9 @@ class PaymentController extends Controller
             'origins' => PaymentOrigin::cases(),
             'canRecord' => $user->can('payments.record'),
             'canCancel' => $user->can('payments.cancel'),
+            // Datenschutz: IBAN nur für interne Rollen bzw. eigene Entities
+            'canSeeAccounts' => $user->isInternal(),
+            'visibleEntityIds' => $user->accessibleEntityIds()->all(),
         ]);
     }
 
@@ -87,10 +90,77 @@ class PaymentController extends Controller
             ->orderBy('loan_number')
             ->get();
 
+        // Bankkonten beider Seiten je Darlehen (Abschnitt 46): Standard ist
+        // Darlehensnehmer zahlt an Darlehensgeber. Externe Benutzer sehen
+        // ausschliesslich Konten ihrer eigenen Entities (Datenschutz).
+        $entityIds = $loans->pluck('lender_entity_id')
+            ->merge($loans->pluck('borrower_entity_id'))
+            ->filter()->unique()->values();
+
+        $accountQuery = \App\Models\BankAccount::query()
+            ->whereIn('entity_id', $entityIds)
+            ->where('is_active', true)
+            ->orderBy('bank_name')
+            ->orderBy('id');
+
+        if (! $user->isInternal()) {
+            $accountQuery->whereIn('entity_id', $user->accessibleEntityIds()->all());
+        }
+
+        $accountsByEntity = $accountQuery->get()
+            ->groupBy('entity_id')
+            ->map(fn ($accounts) => $accounts->map(fn ($a) => [
+                'id' => $a->id,
+                'label' => trim(sprintf(
+                    '%s · %s · %s',
+                    $a->bank_name ?: 'Bank ohne Angabe',
+                    self::formatIban($a->iban),
+                    $a->account_holder,
+                ), ' ·'),
+            ])->values())
+            ->toArray();
+
+        $loanParties = [];
+        foreach ($loans as $loan) {
+            $loanParties[$loan->id] = [
+                'payer_entity_id' => $loan->borrower_entity_id,
+                'payee_entity_id' => $loan->lender_entity_id,
+                'payer_name' => $loan->borrower?->display_name,
+                'payee_name' => $loan->lender?->display_name,
+                'payer_url' => $this->entityUrl($loan->borrower),
+                'payee_url' => $this->entityUrl($loan->lender),
+            ];
+        }
+
         return view('payments.create', [
             'loans' => $loans,
             'selectedLoanId' => $request->query('loan_id'),
+            'accountsByEntity' => $accountsByEntity,
+            'loanParties' => $loanParties,
         ]);
+    }
+
+    /** IBAN lesbar in Vierergruppen. */
+    public static function formatIban(?string $iban): string
+    {
+        $clean = strtoupper(preg_replace('/\s+/', '', (string) $iban));
+
+        return $clean === '' ? '' : implode(' ', str_split($clean, 4));
+    }
+
+    /** Link auf die Akte der Partei (Reiter Bankkonten), falls verfügbar. */
+    private function entityUrl(?\App\Models\Entity $entity): ?string
+    {
+        if (! $entity) {
+            return null;
+        }
+
+        $routeName = $entity->type === \App\Enums\EntityType::Person ? 'persons.show' : 'companies.show';
+        if (! \Illuminate\Support\Facades\Route::has($routeName)) {
+            return null;
+        }
+
+        return route($routeName, [$entity->id, 'tab' => 'bankkonten']);
     }
 
     public function store(
@@ -117,6 +187,10 @@ class PaymentController extends Controller
             'origin' => $data['origin'],
             'status' => 'recorded',
             'note' => $data['note'] ?? null,
+            // Beide Kontoseiten (Abschnitt 46); die Zugehörigkeit zur Partei
+            // wurde im FormRequest geprüft.
+            'payer_bank_account_id' => $data['payer_bank_account_id'] ?? null,
+            'payee_bank_account_id' => $data['payee_bank_account_id'] ?? null,
         ]);
 
         // Verrechnung: konfigurierte Reihenfolge oder manuelle Aufteilung (Abschnitt 47)
@@ -163,6 +237,7 @@ class PaymentController extends Controller
         $model = $this->paymentFor($user, $payment, [
             'loan.lender', 'loan.borrower',
             'payer', 'payee', 'bankAccount',
+            'payerBankAccount', 'payeeBankAccount',
             'allocations.repaymentPlanItem',
         ]);
 
@@ -177,6 +252,8 @@ class PaymentController extends Controller
             'payment' => $model,
             'transactions' => $transactions,
             'canCancel' => $user->can('payments.cancel'),
+            'canSeeAccounts' => $user->isInternal(),
+            'visibleEntityIds' => $user->accessibleEntityIds()->all(),
         ]);
     }
 

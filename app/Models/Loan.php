@@ -27,6 +27,9 @@ class Loan extends Model
             'credit_limit' => 'decimal:2',
             'default_interest_rate' => 'decimal:6',
             'default_interest_enabled' => 'boolean',
+            // Verzugszinsen (Abschnitt 44): fachliche Vorgaben, keine Vorbelegung
+            'default_interest_start' => 'date',
+            'default_interest_method' => \App\Enums\InterestMethod::class,
             'interest_method' => \App\Enums\InterestMethod::class,
             'interest_frequency' => \App\Enums\InterestFrequency::class,
             'repayment_model' => \App\Enums\RepaymentModel::class,

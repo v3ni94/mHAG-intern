@@ -36,6 +36,10 @@ abstract class LoansUiTestCase extends TestCase
         // 2FA-Pflicht für Tests deaktivieren (eigene 2FA-Tests liegen bei der Foundation)
         Setting::set('security', 'two_factor_required_roles', []);
 
+        // Dokumentenablage im Test nur im Speicher (Snapshots der
+        // Forderungsaufstellung, Abschnitt 39)
+        \Illuminate\Support\Facades\Storage::fake(config('documents.disk'));
+
         $this->registerLayoutRouteFallbacks();
     }
 
@@ -86,6 +90,7 @@ abstract class LoansUiTestCase extends TestCase
                 public function allocate($payment, $manualBuckets = null): array { return []; }',
             'DisbursementService' => '
                 public function plan($loan, array $data, $user = null) { return new \App\Models\LoanDisbursement; }
+                public function planMany($loan, array $rows, $user = null): array { return []; }
                 public function confirm($disbursement, $actualAmount, $actualDate, $origin, $user = null): void {}
                 public function markFailed($disbursement, $note = null, $user = null): void {}
                 public function cancel($disbursement, $reason = null, $user = null): void {}',
@@ -122,6 +127,7 @@ abstract class LoansUiTestCase extends TestCase
         });
         $mocks['disbursement'] = $this->mock(\App\Services\Loans\DisbursementService::class, function ($mock) {
             $mock->shouldReceive('plan')->andReturn(new \App\Models\LoanDisbursement)->byDefault();
+            $mock->shouldReceive('planMany')->andReturn([])->byDefault();
             $mock->shouldReceive('confirm')->byDefault();
             $mock->shouldReceive('markFailed')->byDefault();
             $mock->shouldReceive('cancel')->byDefault();

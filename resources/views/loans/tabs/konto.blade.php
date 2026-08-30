@@ -1,6 +1,12 @@
 {{-- Darlehenskonto (Abschnitt 48): chronologisch, mit laufendem Saldo (Forderungssicht) --}}
 <div class="card">
-    <div class="card-header">Darlehenskonto (Forderungssicht: + erhöht Forderung, - reduziert)</div>
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Darlehenskonto (Forderungssicht: + erhöht Forderung, - reduziert)</span>
+        <span class="small text-muted">
+            Gebucht werden Auszahlungen, Tilgungen, Zins- und Gebührenzahlungen, Verzugszinsen und Stornos.
+            Zins- und Gebühren-Sollstellungen werden im Zahlungsplan geführt.
+        </span>
+    </div>
     <div class="table-responsive">
         <table class="table table-hover table-sm align-middle mb-0">
             <thead>

@@ -185,6 +185,60 @@
                        value="{{ old('default_interest_rate', $rate($loan->default_interest_rate)) }}" placeholder="nur wenn vertraglich vereinbart">
                 @error('default_interest_rate')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
+            <div class="col-md-4">
+                <label class="form-label" for="default_interest_start">Verzugsbeginn</label>
+                <input type="date" id="default_interest_start" name="default_interest_start"
+                       class="form-control @error('default_interest_start') is-invalid @enderror"
+                       value="{{ old('default_interest_start', $loan->default_interest_start?->format('Y-m-d')) }}">
+                @error('default_interest_start')<div class="invalid-feedback">{{ $message }}</div>@enderror
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="default_interest_basis">Berechnungsgrundlage</label>
+                <select id="default_interest_basis" name="default_interest_basis"
+                        class="form-select @error('default_interest_basis') is-invalid @enderror">
+                    @foreach (\App\Services\Loans\DefaultInterestService::BASIS_LABELS as $value => $label)
+                        <option value="{{ $value }}"
+                            @selected(old('default_interest_basis', $loan->default_interest_basis ?: \App\Services\Loans\DefaultInterestService::BASIS_OVERDUE_TOTAL) === $value)>
+                            {{ $label }}
+                        </option>
+                    @endforeach
+                </select>
+                @error('default_interest_basis')<div class="invalid-feedback">{{ $message }}</div>@enderror
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="default_interest_method">Zinsmethode der Verzugszinsen</label>
+                <select id="default_interest_method" name="default_interest_method"
+                        class="form-select @error('default_interest_method') is-invalid @enderror">
+                    <option value="">wie Darlehen</option>
+                    @foreach (\App\Enums\InterestMethod::cases() as $method)
+                        <option value="{{ $method->value }}"
+                            @selected(old('default_interest_method', $loan->default_interest_method?->value) === $method->value)>
+                            {{ $method->label() }}
+                        </option>
+                    @endforeach
+                </select>
+                @error('default_interest_method')<div class="invalid-feedback">{{ $message }}</div>@enderror
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="default_interest_mode">Aktivierung</label>
+                <select id="default_interest_mode" name="default_interest_mode"
+                        class="form-select @error('default_interest_mode') is-invalid @enderror">
+                    @foreach (\App\Services\Loans\DefaultInterestService::MODE_LABELS as $value => $label)
+                        <option value="{{ $value }}"
+                            @selected(old('default_interest_mode', $loan->default_interest_mode ?: \App\Services\Loans\DefaultInterestService::MODE_MANUAL) === $value)>
+                            {{ $label }}
+                        </option>
+                    @endforeach
+                </select>
+                @error('default_interest_mode')<div class="invalid-feedback">{{ $message }}</div>@enderror
+            </div>
+            <div class="col-12">
+                <p class="form-text mb-0">
+                    Verzugszinsen werden ausschließlich nach den hier erfassten fachlichen Vorgaben berechnet.
+                    Ohne Verzugszinssatz und ohne Verzugsbeginn berechnet und bucht das System nichts;
+                    ein gesetzlicher Satz wird nicht unterstellt.
+                </p>
+            </div>
         </div>
     </div>
 </div>

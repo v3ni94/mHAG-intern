@@ -219,6 +219,19 @@ class SmokeAllPagesTest extends TestCase
         $this->actingAs($this->admin);
         AuditService::log('smoke.test', $loan);
 
+        // Pflegeoberflächen für Changelog und "Wussten Sie?" (Abschnitte 118, 119)
+        $changelog = \App\Models\ChangelogEntry::firstOrFail();
+        $dailyFact = \App\Models\DailyFact::firstOrCreate(
+            ['month_day' => '01-01'],
+            [
+                'title' => 'Rauchtest-Eintrag',
+                'description' => 'Nur für den Rauchtest angelegt.',
+                'source' => 'Interne Testdaten',
+                'recurring' => true,
+                'is_active' => false,
+            ],
+        );
+
         $shareTransaction = ShareTransaction::firstOrFail();
         $shareholder = \App\Models\Shareholder::firstOrFail();
         $corporateBody = \App\Models\CorporateBody::firstOrFail();
@@ -248,6 +261,8 @@ class SmokeAllPagesTest extends TestCase
             'user' => $this->admin->id,
             'role' => $role->id,
             'faq' => $faq->id,
+            'changelog' => $changelog->id,
+            'daily_fact' => $dailyFact->id,
             'audit' => \App\Models\AuditLog::latest('id')->firstOrFail()->id,
             // 'key' und 'slug' werden separat expandiert
         ];

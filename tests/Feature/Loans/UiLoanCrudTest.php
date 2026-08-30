@@ -122,32 +122,69 @@ class UiLoanCrudTest extends LoansUiTestCase
         $this->assertDatabaseHas('loans', ['title' => 'Rückwirkendes Darlehen', 'effective_from' => '2024-01-01 00:00:00']);
     }
 
-    public function test_store_mit_geplanter_auszahlung_ruft_disbursement_service(): void
+    public function test_store_mit_mehreren_auszahlungszeilen_ruft_disbursement_service(): void
     {
+        // Abschnitt 31: mehrere Teilauszahlungen mit Datum und Betrag direkt
+        // beim Anlegen; der Service erhält genau eine Sammelanforderung.
         $mocks = $this->mockLoanServices();
-        $mocks['disbursement']->shouldReceive('plan')
+        $mocks['disbursement']->shouldReceive('planMany')
             ->once()
-            ->withArgs(fn ($loan, $data) => $data['planned_amount'] === '50000.00')
-            ->andReturn(new \App\Models\LoanDisbursement);
+            ->withArgs(function ($loan, $rows) {
+                return count($rows) === 2
+                    && $rows[0]['planned_amount'] === '30000.00'
+                    && $rows[0]['confirmed'] === true
+                    && $rows[1]['planned_amount'] === '20000.00'
+                    && $rows[1]['confirmed'] === false;
+            })
+            ->andReturn([]);
 
         $user = $this->makeInternalUser();
         $lender = $this->makeEntity('Geber');
         $borrower = $this->makeEntity('Nehmer');
 
         $this->actingAs($user)->post(route('loans.store'), [
-            'title' => 'Darlehen mit Auszahlung',
+            'title' => 'Darlehen mit zwei Auszahlungen',
             'lender_entity_id' => $lender->id,
             'borrower_entity_id' => $borrower->id,
-            'effective_from' => now()->addDay()->toDateString(),
+            'effective_from' => '2026-01-01',
             'principal_amount' => '50.000,00',
             'interest_rate' => '5',
             'interest_method' => 'act_365',
             'interest_frequency' => 'monthly',
             'repayment_model' => 'bullet',
-            'plan_disbursement' => '1',
-            'disbursement_planned_amount' => '50.000,00',
-            'disbursement_planned_date' => now()->addWeek()->toDateString(),
+            'disbursements' => [
+                ['date' => '2026-01-01', 'amount' => '30.000,00', 'status' => 'confirmed', 'origin' => 'bank_import'],
+                ['date' => '2026-03-01', 'amount' => '20.000,00', 'status' => 'planned'],
+            ],
         ])->assertRedirect();
+    }
+
+    public function test_store_lehnt_auszahlungen_ueber_dem_rahmen_ab(): void
+    {
+        $this->mockLoanServices();
+        $user = $this->makeInternalUser();
+        $lender = $this->makeEntity('Geber');
+        $borrower = $this->makeEntity('Nehmer');
+
+        // Rahmen 50.000,00; Summe der Auszahlungen 60.000,00 -> Ablehnung
+        $response = $this->actingAs($user)->post(route('loans.store'), [
+            'title' => 'Darlehen mit zu hohen Auszahlungen',
+            'lender_entity_id' => $lender->id,
+            'borrower_entity_id' => $borrower->id,
+            'effective_from' => '2026-01-01',
+            'principal_amount' => '50.000,00',
+            'interest_rate' => '5',
+            'interest_method' => 'act_365',
+            'interest_frequency' => 'monthly',
+            'repayment_model' => 'bullet',
+            'disbursements' => [
+                ['date' => '2026-01-01', 'amount' => '40.000,00', 'status' => 'confirmed'],
+                ['date' => '2026-02-01', 'amount' => '20.000,00', 'status' => 'confirmed'],
+            ],
+        ]);
+
+        $response->assertSessionHasErrors('disbursements');
+        $this->assertDatabaseMissing('loans', ['title' => 'Darlehen mit zu hohen Auszahlungen']);
     }
 
     public function test_show_rendert_kopf_kpi_und_tabs(): void

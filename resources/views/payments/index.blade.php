@@ -67,6 +67,7 @@
                         <th class="text-end">Betrag</th>
                         <th>Richtung</th>
                         <th>Herkunft</th>
+                        <th>Konten</th>
                         <th>Status</th>
                         <th></th>
                     </tr>
@@ -83,6 +84,28 @@
                             <td class="text-end"><x-money :amount="$payment->amount" /></td>
                             <td>{{ $payment->direction === 'incoming' ? 'Eingang' : 'Ausgang' }}</td>
                             <td><x-origin-badge :origin="$payment->origin" /></td>
+                            {{-- Konten kompakt (Abschnitt 46); IBAN nur fuer Berechtigte --}}
+                            <td class="small">
+                                @php
+                                    $von = $payment->payerBankAccount ?: $payment->bankAccount;
+                                    $auf = $payment->payeeBankAccount;
+                                    $sichtbar = fn ($konto) => $konto && ($canSeeAccounts
+                                        || in_array((int) $konto->entity_id, array_map('intval', $visibleEntityIds), true));
+                                @endphp
+                                <span class="text-muted">von</span>
+                                @if ($sichtbar($von))
+                                    <span class="font-monospace">{{ \App\Http\Controllers\PaymentController::formatIban($von->iban) }}</span>
+                                @else
+                                    <span class="text-muted">{{ $von ? 'nicht sichtbar' : 'ohne' }}</span>
+                                @endif
+                                <br>
+                                <span class="text-muted">auf</span>
+                                @if ($sichtbar($auf))
+                                    <span class="font-monospace">{{ \App\Http\Controllers\PaymentController::formatIban($auf->iban) }}</span>
+                                @else
+                                    <span class="text-muted">{{ $auf ? 'nicht sichtbar' : 'ohne' }}</span>
+                                @endif
+                            </td>
                             <td>
                                 @if ($payment->status === 'cancelled')
                                     <x-status-badge severity="danger" icon="bi-x-octagon" label="Storniert" />
@@ -97,7 +120,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="9"><x-empty-state icon="bi-arrow-left-right" message="Keine Zahlungen gefunden." /></td></tr>
+                        <tr><td colspan="10"><x-empty-state icon="bi-arrow-left-right" message="Keine Zahlungen gefunden." /></td></tr>
                     @endforelse
                 </tbody>
             </table>

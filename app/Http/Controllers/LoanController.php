@@ -281,7 +281,7 @@ class LoanController extends Controller
             'zahlungen' => ['payments.payer', 'payments.payee', 'payments.allocations'],
             'zinsen' => ['repaymentPlanItems'],
             'gebuehren' => ['fees'],
-            'auszahlungen' => ['disbursements.bankAccount'],
+            'auszahlungen' => ['disbursements.sourceBankAccount', 'disbursements.targetBankAccount', 'disbursements.bankAccount'],
             'vertraege' => ['contracts'],
             'sicherheiten' => ['securities.provider', 'guarantees.guarantor'],
             'dokumente' => ['documentLinks.document'],
@@ -316,6 +316,13 @@ class LoanController extends Controller
                 'defaultInterestModeLabel' => $defaultInterestService->modeLabel($model),
             ],
             'dokumente' => ['statementDocuments' => $this->statementDocuments($model)],
+            'auszahlungen' => [
+                // Bankkonten beider Seiten (Abschnitt 31): Geber- und Nehmerkonten
+                'lenderAccounts' => $this->accountsOf($model->lender_entity_id, $user),
+                'borrowerAccounts' => $this->accountsOf($model->borrower_entity_id, $user),
+                'canSeeAccounts' => $user->isInternal(),
+                'visibleEntityIds' => $user->accessibleEntityIds()->all(),
+            ],
             'konto' => ['accountRows' => $this->accountRows($model)],
             'soll-ist' => ['interestItems' => $model->repaymentPlanItems->where('item_type', \App\Enums\RepaymentItemType::Interest)],
             'zinsen' => ['interestItems' => $model->repaymentPlanItems->where('item_type', \App\Enums\RepaymentItemType::Interest)],
@@ -551,6 +558,29 @@ class LoanController extends Controller
         $allowed = self::TRANSITIONS[$loan->status->value] ?? [];
 
         return array_map(fn (string $status) => LoanStatus::from($status), $allowed);
+    }
+
+    /**
+     * Aktive Bankkonten einer Partei. Externe Benutzer sehen ausschließlich
+     * Konten ihrer eigenen Entities (IBAN ist ein personenbezogenes Datum).
+     *
+     * @return \Illuminate\Support\Collection<int, \App\Models\BankAccount>
+     */
+    private function accountsOf(?int $entityId, User $user): \Illuminate\Support\Collection
+    {
+        if (! $entityId) {
+            return collect();
+        }
+        if (! $user->isInternal() && ! $user->accessibleEntityIds()->contains($entityId)) {
+            return collect();
+        }
+
+        return \App\Models\BankAccount::query()
+            ->where('entity_id', $entityId)
+            ->where('is_active', true)
+            ->orderBy('bank_name')
+            ->orderBy('id')
+            ->get();
     }
 
     /**

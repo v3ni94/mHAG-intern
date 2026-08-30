@@ -59,6 +59,10 @@ class StorePaymentRequest extends LoansFormRequest
                 PaymentOrigin::BankImport->value,
             ])],
             'note' => ['nullable', 'string', 'max:2000'],
+            // Beide Kontoseiten (Abschnitt 46): von welchem Konto gezahlt wurde
+            // und auf welches. Optional, weil bei Altvorgängen oft unbekannt.
+            'payer_bank_account_id' => ['nullable', 'integer', 'exists:bank_accounts,id'],
+            'payee_bank_account_id' => ['nullable', 'integer', 'exists:bank_accounts,id'],
             'allocate_manually' => ['nullable', 'boolean'],
             'alloc' => ['nullable', 'array'],
             'alloc.costs' => ['nullable', 'numeric', 'gte:0'],
@@ -72,6 +76,30 @@ class StorePaymentRequest extends LoansFormRequest
 
     public function withValidator($validator): void
     {
+        // Kontoseiten müssen der jeweiligen Partei gehören (Datenschutz:
+        // keine fremden Kontodaten an einen Vorgang hängen).
+        $validator->after(function ($validator) {
+            $loan = Loan::find($this->input('loan_id'));
+            if (! $loan) {
+                return;
+            }
+            $payerEntityId = (int) ($this->input('payer_entity_id') ?: $loan->borrower_entity_id);
+            $payeeEntityId = (int) ($this->input('payee_entity_id') ?: $loan->lender_entity_id);
+
+            $this->assertAccountBelongsTo(
+                $validator,
+                'payer_bank_account_id',
+                $payerEntityId,
+                'Das Konto "Gezahlt von Konto" gehört nicht zum Zahler. Bitte ein Konto des Zahlers wählen.',
+            );
+            $this->assertAccountBelongsTo(
+                $validator,
+                'payee_bank_account_id',
+                $payeeEntityId,
+                'Das Konto "Gezahlt auf Konto" gehört nicht zum Empfänger. Bitte ein Konto des Empfängers wählen.',
+            );
+        });
+
         $validator->after(function ($validator) {
             if (! $this->boolean('allocate_manually')) {
                 return;
@@ -89,10 +117,24 @@ class StorePaymentRequest extends LoansFormRequest
         });
     }
 
+    private function assertAccountBelongsTo($validator, string $field, int $entityId, string $message): void
+    {
+        $accountId = $this->input($field);
+        if (! $accountId) {
+            return;
+        }
+        $belongs = \App\Models\BankAccount::where('id', $accountId)->where('entity_id', $entityId)->exists();
+        if (! $belongs) {
+            $validator->errors()->add($field, $message);
+        }
+    }
+
     public function attributes(): array
     {
         return [
             'loan_id' => 'Darlehen',
+            'payer_bank_account_id' => 'Gezahlt von Konto',
+            'payee_bank_account_id' => 'Gezahlt auf Konto',
             'payer_entity_id' => 'Zahler',
             'payee_entity_id' => 'Empfänger',
             'payment_date' => 'Zahlungsdatum',

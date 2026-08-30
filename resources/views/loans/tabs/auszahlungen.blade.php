@@ -11,6 +11,7 @@
                     <th class="text-end">IST-Betrag</th>
                     <th>Status</th>
                     <th>Herkunft</th>
+                    <th>Konten (von / auf)</th>
                     <th>Referenz</th>
                     <th></th>
                 </tr>
@@ -25,6 +26,19 @@
                         <td class="text-end">@if ($disbursement->actual_amount !== null)<x-money :amount="$disbursement->actual_amount" />@endif</td>
                         <td><x-enum-badge :enum="$disbursement->status" /></td>
                         <td><x-origin-badge :origin="$disbursement->origin" /></td>
+                        <td class="small">
+                            @include('payments._bank-account', [
+                                'account' => $disbursement->sourceBankAccount ?: $disbursement->bankAccount,
+                                'canSeeAccounts' => $canSeeAccounts,
+                                'visibleEntityIds' => $visibleEntityIds,
+                            ])
+                            <hr class="my-1">
+                            @include('payments._bank-account', [
+                                'account' => $disbursement->targetBankAccount,
+                                'canSeeAccounts' => $canSeeAccounts,
+                                'visibleEntityIds' => $visibleEntityIds,
+                            ])
+                        </td>
                         <td class="small">{{ $disbursement->reference }}</td>
                         <td class="text-end">
                             @if ($canRecord && $isOpen)
@@ -46,7 +60,7 @@
                     </tr>
                     @if ($canRecord && $isOpen)
                         <tr class="collapse" id="disb-confirm-{{ $disbursement->id }}">
-                            <td colspan="8" class="bg-light">
+                            <td colspan="9" class="bg-light">
                                 <form method="POST" action="{{ route('loans.disbursements.confirm', $disbursement) }}" class="row g-2 align-items-end p-2">
                                     @csrf
                                     <div class="col-md-3">
@@ -77,7 +91,7 @@
                     @endif
                     @if ($canCancelPayments && $disbursement->status !== \App\Enums\DisbursementStatus::Cancelled)
                         <tr class="collapse" id="disb-cancel-{{ $disbursement->id }}">
-                            <td colspan="8" class="bg-light">
+                            <td colspan="9" class="bg-light">
                                 <form method="POST" action="{{ route('loans.disbursements.cancel', $disbursement) }}" class="row g-2 align-items-end p-2">
                                     @csrf
                                     <div class="col-md-9">
@@ -92,7 +106,7 @@
                         </tr>
                     @endif
                 @empty
-                    <tr><td colspan="8"><x-empty-state icon="bi-cash-coin" message="Keine Auszahlungen vorhanden." /></td></tr>
+                    <tr><td colspan="9"><x-empty-state icon="bi-cash-coin" message="Keine Auszahlungen vorhanden." /></td></tr>
                 @endforelse
             </tbody>
         </table>
@@ -116,6 +130,52 @@
                 </div>
                 <div class="col-md-3 d-grid">
                     <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> Auszahlung planen</button>
+                </div>
+
+                {{-- Beide Kontoseiten (Abschnitt 31), freiwillig: bei Altvorgaengen oft unbekannt --}}
+                <div class="col-md-6">
+                    <label class="form-label small mb-1" for="disb-new-source">Ausgezahlt von Konto (Darlehensgeber)</label>
+                    @if ($lenderAccounts->isEmpty())
+                        <div class="form-text mb-1">
+                            Für {{ $loan->lender?->display_name ?: 'den Darlehensgeber' }} ist kein Bankkonto hinterlegt.
+                            @php($lenderRoute = $loan->lender?->type === \App\Enums\EntityType::Person ? 'persons.show' : 'companies.show')
+                            @if ($loan->lender && \Illuminate\Support\Facades\Route::has($lenderRoute))
+                                <a href="{{ route($lenderRoute, [$loan->lender_entity_id, 'tab' => 'bankkonten']) }}">Konten in der Akte pflegen</a>.
+                            @endif
+                        </div>
+                    @else
+                        <select id="disb-new-source" name="source_bank_account_id" class="form-select form-select-sm">
+                            <option value="">ohne Angabe</option>
+                            @foreach ($lenderAccounts as $account)
+                                <option value="{{ $account->id }}" @selected((string) old('source_bank_account_id') === (string) $account->id)>
+                                    {{ $account->bank_name ?: 'Bank ohne Angabe' }} · {{ \App\Http\Controllers\PaymentController::formatIban($account->iban) }} · {{ $account->account_holder }}
+                                </option>
+                            @endforeach
+                        </select>
+                    @endif
+                    @error('source_bank_account_id')<div class="text-danger small">{{ $message }}</div>@enderror
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small mb-1" for="disb-new-target">Ausgezahlt auf Konto (Darlehensnehmer)</label>
+                    @if ($borrowerAccounts->isEmpty())
+                        <div class="form-text mb-1">
+                            Für {{ $loan->borrower?->display_name ?: 'den Darlehensnehmer' }} ist kein Bankkonto hinterlegt.
+                            @php($borrowerRoute = $loan->borrower?->type === \App\Enums\EntityType::Person ? 'persons.show' : 'companies.show')
+                            @if ($loan->borrower && \Illuminate\Support\Facades\Route::has($borrowerRoute))
+                                <a href="{{ route($borrowerRoute, [$loan->borrower_entity_id, 'tab' => 'bankkonten']) }}">Konten in der Akte pflegen</a>.
+                            @endif
+                        </div>
+                    @else
+                        <select id="disb-new-target" name="target_bank_account_id" class="form-select form-select-sm">
+                            <option value="">ohne Angabe</option>
+                            @foreach ($borrowerAccounts as $account)
+                                <option value="{{ $account->id }}" @selected((string) old('target_bank_account_id') === (string) $account->id)>
+                                    {{ $account->bank_name ?: 'Bank ohne Angabe' }} · {{ \App\Http\Controllers\PaymentController::formatIban($account->iban) }} · {{ $account->account_holder }}
+                                </option>
+                            @endforeach
+                        </select>
+                    @endif
+                    @error('target_bank_account_id')<div class="text-danger small">{{ $message }}</div>@enderror
                 </div>
             </form>
         </div>

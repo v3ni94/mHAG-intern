@@ -34,6 +34,13 @@
         </tbody>
     </table>
 
+    @if ($loan->default_interest_enabled && ($loan->default_interest_rate === null || $loan->default_interest_start === null))
+        <p class="text-muted" style="margin-top: 12px;">
+            Hinweis: Verzugszinsen sind für dieses Darlehen aktiviert, es fehlen jedoch die fachlichen Vorgaben
+            (Verzugszinssatz und Verzugsbeginn). Verzugszinsen sind in dieser Aufstellung deshalb nicht enthalten.
+        </p>
+    @endif
+
     <p class="text-muted" style="margin-top: 18px;">
         Diese Aufstellung wurde maschinell zum genannten Stichtag aus den erfassten Vertrags- und Zahlungsdaten erstellt.
         Systemseitig angenommene, nicht bestätigte Zahlungen sind in den zugrunde liegenden Daten entsprechend gekennzeichnet.

@@ -30,6 +30,8 @@
                             nicht aktiviert
                         @endif
                     </dd>
+                    <dt class="col-5">Verzugsbeginn</dt>
+                    <dd class="col-7">{{ $loan->default_interest_start ? format_date($loan->default_interest_start) : 'nicht erfasst' }}</dd>
                     <dt class="col-5">Sachbearbeiter</dt><dd class="col-7">{{ $loan->handler?->name ?: 'ohne' }}</dd>
                     <dt class="col-5">Projekt</dt><dd class="col-7">{{ $loan->project ?: 'ohne' }}</dd>
                     <dt class="col-5">Kostenstelle</dt><dd class="col-7">{{ $loan->cost_center ?: 'ohne' }}</dd>
@@ -97,6 +99,76 @@
                         <div class="col-12">
                             <label class="visually-hidden" for="term-note">Notiz</label>
                             <input type="text" id="term-note" name="note" class="form-control form-control-sm" placeholder="Notiz (optional)">
+                        </div>
+                    </form>
+                </div>
+            @endif
+        </div>
+
+        {{--
+            Verzugszinsen (Abschnitt 44): Berechnung ausschließlich nach den
+            fachlich erfassten Vorgaben. Fehlt Satz oder Verzugsbeginn, wird
+            nichts berechnet und die Oberfläche weist darauf hin.
+        --}}
+        <div class="card">
+            <div class="card-header">
+                Verzugszinsen
+                <x-help-icon text="Taggenaue Berechnung auf den überfälligen Betrag ab Verzugsbeginn bis zum Stichtag. Satz, Verzugsbeginn, Grundlage und Zinsmethode sind fachlich vorzugeben; das System setzt keinen gesetzlichen Satz an." />
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0 small">
+                    <dt class="col-5">Aktivierung</dt><dd class="col-7">{{ $defaultInterestModeLabel }}</dd>
+                    <dt class="col-5">Satz</dt>
+                    <dd class="col-7">{{ $loan->default_interest_rate !== null ? format_percent($loan->default_interest_rate) : 'nicht erfasst' }}</dd>
+                    <dt class="col-5">Verzugsbeginn</dt>
+                    <dd class="col-7">{{ $loan->default_interest_start ? format_date($loan->default_interest_start) : 'nicht erfasst' }}</dd>
+                    <dt class="col-5">Grundlage</dt><dd class="col-7">{{ $defaultInterestBasisLabel }}</dd>
+                    <dt class="col-5">Zinsmethode</dt>
+                    <dd class="col-7">{{ $loan->default_interest_method?->label() ?: 'wie Darlehen ('.$loan->interest_method?->label().')' }}</dd>
+                    <dt class="col-5">Berechnet zum heutigen Tag</dt>
+                    <dd class="col-7">
+                        @if ($defaultInterest['configured'])
+                            <x-money :amount="$defaultInterest['amount']" :currency="$loan->currency" />
+                        @else
+                            <span class="text-muted">nicht berechenbar</span>
+                        @endif
+                    </dd>
+                    <dt class="col-5">Im Konto gebucht</dt>
+                    <dd class="col-7"><x-money :amount="$defaultInterestBooked" :currency="$loan->currency" /></dd>
+                </dl>
+
+                @if (! $defaultInterest['configured'])
+                    <div class="alert alert-warning py-2 small mt-3 mb-0">
+                        <strong>Keine Berechnung möglich.</strong>
+                        <ul class="mb-0 ps-3">
+                            @foreach ($defaultInterest['missing'] as $hinweis)
+                                <li>{{ $hinweis }}</li>
+                            @endforeach
+                        </ul>
+                        Satz und Verzugsbeginn sind über "Bearbeiten" zu erfassen.
+                    </div>
+                @endif
+            </div>
+            @if ($canUpdate && $defaultInterest['configured'])
+                <div class="card-footer">
+                    <form method="POST" action="{{ route('loans.recalculate', $loan) }}" class="row g-2 align-items-end">
+                        @csrf
+                        <input type="hidden" name="book_default_interest" value="1">
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1" for="default-interest-as-of">Stichtag</label>
+                            <input type="date" id="default-interest-as-of" name="default_interest_as_of"
+                                   class="form-control form-control-sm" value="{{ now()->toDateString() }}">
+                        </div>
+                        <div class="col-md-6 d-grid">
+                            <button type="submit" class="btn btn-primary btn-sm">
+                                <i class="bi bi-calculator"></i> Verzugszinsen berechnen und buchen
+                            </button>
+                        </div>
+                        <div class="col-12">
+                            <p class="form-text mb-0">
+                                Die Buchung erfolgt im Darlehenskonto als Verzugszins mit Wirkungsdatum zum Stichtag.
+                                Eine frühere Verzugszinsbuchung wird per Gegenbuchung aufgehoben, nicht gelöscht.
+                            </p>
                         </div>
                     </form>
                 </div>

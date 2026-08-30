@@ -116,7 +116,10 @@ class DisbursementService
             'planned_date' => $plannedDate,
             'status' => DisbursementStatus::Planned,
             'origin' => PaymentOrigin::Assumed,
-            'bank_account_id' => $data['bank_account_id'] ?? null,
+            // Beide Kontoseiten (Abschnitt 31): von wo und wohin ausgezahlt wurde.
+            'source_bank_account_id' => $data['source_bank_account_id'] ?? null,
+            'target_bank_account_id' => $data['target_bank_account_id'] ?? null,
+            'bank_account_id' => $data['bank_account_id'] ?? null, // überholt, nur Bestandsdaten
             'reference' => $data['reference'] ?? null,
             'note' => $data['note'] ?? null,
             'recorded_at' => now(),

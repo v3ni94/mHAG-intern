@@ -4,6 +4,7 @@ use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HelpController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\ReminderController;
 use App\Http\Controllers\ReportController;
 use Illuminate\Support\Facades\Route;
@@ -42,6 +43,13 @@ Route::post('/benachrichtigungen/alle-gelesen', [NotificationController::class, 
 Route::middleware('permission:reports.view')->group(function () {
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
     Route::get('/reports/{key}', [ReportController::class, 'show'])->name('reports.show');
+});
+
+// Erste-Schritte-Assistent (Abschnitt 111)
+Route::middleware('permission:admin.settings')->prefix('erste-schritte')->name('onboarding.')->group(function () {
+    Route::get('/', [OnboardingController::class, 'index'])->name('index');
+    Route::post('/ueberspringen', [OnboardingController::class, 'skip'])->name('skip');
+    Route::post('/erneut-aufnehmen', [OnboardingController::class, 'restart'])->name('restart');
 });
 
 // Hilfe, FAQ, Changelog (Abschnitte 110-118)

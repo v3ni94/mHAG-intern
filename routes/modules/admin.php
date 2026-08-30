@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\BackupController;
+use App\Http\Controllers\Admin\ChangelogController;
+use App\Http\Controllers\Admin\DailyFactController;
 use App\Http\Controllers\Admin\FaqController;
 use App\Http\Controllers\Admin\InvitationController;
 use App\Http\Controllers\Admin\RoleController;
@@ -74,6 +76,26 @@ Route::prefix('administration')->name('admin.')->group(function () {
             Route::get('/{faq}/bearbeiten', [FaqController::class, 'edit'])->name('edit');
             Route::put('/{faq}', [FaqController::class, 'update'])->name('update');
             Route::delete('/{faq}', [FaqController::class, 'destroy'])->name('destroy');
+        });
+
+        // Changelog-Verwaltung "Was ist neu?" (Abschnitt 118)
+        Route::prefix('changelog')->name('changelog.')->group(function () {
+            Route::get('/', [ChangelogController::class, 'index'])->name('index');
+            Route::get('/neu', [ChangelogController::class, 'create'])->name('create');
+            Route::post('/', [ChangelogController::class, 'store'])->name('store');
+            Route::get('/{changelog}/bearbeiten', [ChangelogController::class, 'edit'])->whereNumber('changelog')->name('edit');
+            Route::put('/{changelog}', [ChangelogController::class, 'update'])->whereNumber('changelog')->name('update');
+            Route::delete('/{changelog}', [ChangelogController::class, 'destroy'])->whereNumber('changelog')->name('destroy');
+        });
+
+        // Einträge "Wussten Sie?" für die Fußzeile (Abschnitt 119)
+        Route::prefix('wussten-sie')->name('daily-facts.')->group(function () {
+            Route::get('/', [DailyFactController::class, 'index'])->name('index');
+            Route::get('/neu', [DailyFactController::class, 'create'])->name('create');
+            Route::post('/', [DailyFactController::class, 'store'])->name('store');
+            Route::get('/{daily_fact}/bearbeiten', [DailyFactController::class, 'edit'])->whereNumber('daily_fact')->name('edit');
+            Route::put('/{daily_fact}', [DailyFactController::class, 'update'])->whereNumber('daily_fact')->name('update');
+            Route::delete('/{daily_fact}', [DailyFactController::class, 'destroy'])->whereNumber('daily_fact')->name('destroy');
         });
     });
 

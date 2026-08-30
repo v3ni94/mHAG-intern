@@ -88,6 +88,38 @@
             </div>
         </div>
 
+        {{-- Zahlungsverkehr: beide Kontoseiten (Abschnitt 46) --}}
+        <div class="card mb-3">
+            <div class="card-header">
+                Konten
+                <x-help-icon text="Von welchem Konto gezahlt wurde und auf welches. Beide Angaben sind freiwillig, weil sie bei nachträglich erfassten Altvorgängen häufig nicht mehr bekannt sind. Es können nur Konten der jeweiligen Partei gewählt werden." />
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" for="payer_bank_account_id">Gezahlt von Konto</label>
+                        <select id="payer_bank_account_id" name="payer_bank_account_id"
+                                class="form-select @error('payer_bank_account_id') is-invalid @enderror"
+                                data-selected="{{ old('payer_bank_account_id') }}">
+                            <option value="">ohne Angabe</option>
+                        </select>
+                        @error('payer_bank_account_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        <div class="form-text" id="payer_bank_account_hint"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="payee_bank_account_id">Gezahlt auf Konto</label>
+                        <select id="payee_bank_account_id" name="payee_bank_account_id"
+                                class="form-select @error('payee_bank_account_id') is-invalid @enderror"
+                                data-selected="{{ old('payee_bank_account_id') }}">
+                            <option value="">ohne Angabe</option>
+                        </select>
+                        @error('payee_bank_account_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        <div class="form-text" id="payee_bank_account_hint"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="card mb-3">
             <div class="card-header">Verrechnung</div>
             <div class="card-body">
@@ -120,3 +152,70 @@
         </div>
     </form>
 @endsection
+
+@push('scripts')
+    {{--
+        Kontoauswahl je Partei: Die wählbaren Konten hängen vom gewählten
+        Darlehen ab (Zahler = Darlehensnehmer, Empfänger = Darlehensgeber).
+        Ohne hinterlegtes Konto erscheint ein Hinweis mit Verweis auf die
+        Akte der Partei (Reiter Bankkonten). Kein Framework, reines JavaScript.
+    --}}
+    <script>
+        (function () {
+            const accountsByEntity = @json($accountsByEntity);
+            const loanParties = @json($loanParties);
+
+            const loanSelect = document.getElementById('loan_id');
+            const targets = [
+                { side: 'payer', select: document.getElementById('payer_bank_account_id'), hint: document.getElementById('payer_bank_account_hint') },
+                { side: 'payee', select: document.getElementById('payee_bank_account_id'), hint: document.getElementById('payee_bank_account_hint') }
+            ];
+
+            function fill(target, parties) {
+                const select = target.select;
+                const hint = target.hint;
+                if (!select) { return; }
+
+                const wanted = select.dataset.selected || select.value || '';
+                select.innerHTML = '';
+                const empty = document.createElement('option');
+                empty.value = '';
+                empty.textContent = 'ohne Angabe';
+                select.appendChild(empty);
+
+                if (!parties) {
+                    hint.textContent = 'Bitte zuerst ein Darlehen wählen.';
+                    return;
+                }
+
+                const entityId = parties[target.side + '_entity_id'];
+                const name = parties[target.side + '_name'] || 'die Partei';
+                const url = parties[target.side + '_url'];
+                const accounts = (entityId && accountsByEntity[entityId]) ? accountsByEntity[entityId] : [];
+
+                accounts.forEach(function (account) {
+                    const option = document.createElement('option');
+                    option.value = account.id;
+                    option.textContent = account.label;
+                    if (String(account.id) === String(wanted)) { option.selected = true; }
+                    select.appendChild(option);
+                });
+
+                if (accounts.length === 0) {
+                    hint.innerHTML = 'Für ' + name + ' ist kein Bankkonto hinterlegt.'
+                        + (url ? ' <a href="' + url + '">Konten in der Akte pflegen</a>.' : '');
+                } else {
+                    hint.textContent = 'Auswählbar sind ausschließlich Konten von ' + name + '.';
+                }
+            }
+
+            function refresh() {
+                const parties = loanSelect ? loanParties[loanSelect.value] : null;
+                targets.forEach(function (target) { fill(target, parties); });
+            }
+
+            if (loanSelect) { loanSelect.addEventListener('change', refresh); }
+            refresh();
+        })();
+    </script>
+@endpush

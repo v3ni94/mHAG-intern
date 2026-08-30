@@ -187,13 +187,15 @@ class HelpController extends Controller
             ->limit(200)
             ->get();
 
+        // FAQ-Einträge sind kurz: hier genügt ein gefundener Suchbegriff.
         return $entries
             ->map(fn (FaqEntry $entry) => [
                 'entry' => $entry,
+                'matches' => $this->score($entry->question.' '.$entry->answer, $terms),
                 'score' => 2 * $this->score($entry->question, $terms) + $this->score($entry->answer, $terms),
                 'excerpt' => $this->excerpt($entry->answer, $terms),
             ])
-            ->filter(fn (array $row) => $row['score'] > 0)
+            ->filter(fn (array $row) => $row['matches'] >= 1)
             ->sortByDesc('score')
             ->take(25)
             ->values();
@@ -204,6 +206,8 @@ class HelpController extends Controller
      */
     private function searchPages(array $terms): Collection
     {
+        $minimum = $this->minimumMatches($terms);
+
         return collect(self::PAGES)
             ->map(function (string $title, string $slug) use ($terms) {
                 $content = $this->pageText($slug);
@@ -211,14 +215,28 @@ class HelpController extends Controller
                 return [
                     'slug' => $slug,
                     'title' => $title,
+                    'matches' => $this->score($title.' '.$content, $terms),
                     'score' => 3 * $this->score($title, $terms) + $this->score($content, $terms),
                     'excerpt' => $this->excerpt($content, $terms),
                 ];
             })
-            ->filter(fn (array $row) => $row['score'] > 0)
+            ->filter(fn (array $row) => $row['matches'] >= $minimum)
             ->sortByDesc('score')
             ->take(25)
             ->values();
+    }
+
+    /**
+     * Mindestanzahl gefundener Suchbegriffe je Anleitungsseite. Anleitungen
+     * sind lange Texte; bei mehreren Begriffen muss mindestens die Hälfte
+     * vorkommen, damit nicht ein einzelnes Füllwort jede Seite als Treffer
+     * ausgibt.
+     *
+     * @param  array<string, list<string>>  $terms
+     */
+    private function minimumMatches(array $terms): int
+    {
+        return max(1, (int) ceil(count($terms) / 2));
     }
 
     /**

@@ -12,6 +12,8 @@
         </form>
     </x-page-header>
 
+    @include('partials.config-cache-hint')
+
     <div class="alert alert-info small">
         Die Anbindung erfolgt über JWT Grant, also ohne Anmeldung einer Person. Der Verbindungstest meldet sich an
         und fragt den API-Benutzer ab; es wird kein Umschlag erzeugt und nichts versendet.

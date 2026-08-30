@@ -12,6 +12,8 @@
         </form>
     </x-page-header>
 
+    @include('partials.config-cache-hint')
+
     <div class="row">
         <div class="col-lg-5 mb-3">
             <div class="card h-100">

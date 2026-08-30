@@ -1,8 +1,8 @@
 @extends('pdf.layout')
 
-@section('content')
-    <h1>{{ $title }}</h1>
+@section('title', $title)
 
+@section('content')
     <p style="color: #55534f; font-size: 9px;">
         Erstellt am {{ format_datetime($generatedAt) }}
         @if (array_filter($report['filters'] ?? []))

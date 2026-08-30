@@ -157,6 +157,53 @@ systemctl restart mhag-intranet-worker
 php artisan up
 ```
 
+## 6b. Deployment über GitHub Actions (IONOS, ohne SSH)
+
+`.github/workflows/deploy.yml` überträgt die Anwendung per SFTP mit `lftp`.
+Die Bibliotheken werden auf dem Läufer mit PHP 8.4 gebaut, passend zur
+Laufzeitfassung des Webspace.
+
+Auslöser: Push auf `main` oder `master`, sowie manuell über
+"Run workflow". Solange keiner dieser Zweige besteht, greift ausschließlich
+der manuelle Auslöser.
+
+Erforderliche Secrets unter Settings, Secrets and variables, Actions:
+
+| Secret | Bedeutung |
+| --- | --- |
+| `SFTP_HOST` | Serveradresse des Webspace |
+| `SFTP_USERNAME` | SFTP-Benutzer |
+| `SFTP_PASSWORD` | Kennwort des SFTP-Benutzers |
+| `SFTP_TARGET` | Zielverzeichnis, in dem `app/`, `public/` und `vendor/` liegen |
+| `SFTP_PORT` | optional, Vorgabe 22 |
+| `HEALTHCHECK_URL` | optional, Adresse für die Erreichbarkeitsprüfung |
+
+Nicht übertragen werden `.env`, `storage/` (Dokumente, Protokolle,
+Sitzungen), `bootstrap/cache/`, die Entwicklungsdatenbank sowie `tests/`,
+`tools/`, `docs/`, `node_modules/` und `CLAUDE.md`.
+
+Gespiegelt wird **ohne** `--delete`: auf dem Server nicht mehr benötigte
+Dateien bleiben liegen und sind von Hand zu entfernen. Das ist bewusst so
+gewählt, damit ein fehlerhaftes Muster keine Produktivdaten löscht.
+
+Nach der Übertragung entfernt der Ablauf `bootstrap/cache/config.php`,
+`bootstrap/cache/events.php`, `bootstrap/cache/routes*.php` und die
+vorkompilierten Oberflächen. Ein eigener Schritt weist nach, dass sie
+tatsächlich weg sind, und lässt den Ablauf sonst scheitern. Ohne diesen
+Schritt liefe die Anwendung mit dem vorherigen Stand weiter.
+
+Zwei Dinge erledigt der Ablauf **nicht**:
+
+1. **Datenbankänderungen.** Bringt eine Lieferung Migrationen mit, ist
+   `tools/web-setup/update.php` mit Zugriffsschlüssel einzeln nach `public/`
+   zu laden, auszuführen und danach zu löschen.
+2. **Erneutes Zwischenspeichern.** Die Anwendung läuft nach der Übertragung
+   ohne Zwischenspeicher, also langsamer. Das Optimieren erfolgt über
+   dasselbe Werkzeug.
+
+Über die Umgebung `produktion` lässt sich im Repository eine Freigabe durch
+eine zweite Person erzwingen (Settings, Environments, Required reviewers).
+
 ## 6a. Serverfehler 500 auf jeder Seite
 
 Erster Verdacht ist die `.env`, nicht der Anwendungscode. Die Datei wird

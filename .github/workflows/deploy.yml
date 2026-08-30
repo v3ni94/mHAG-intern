@@ -1,0 +1,247 @@
+# ---------------------------------------------------------------------------
+# Übertragung der Anwendung auf den IONOS-Webspace
+# ---------------------------------------------------------------------------
+# Der Webspace hat keinen SSH-Zugang. Die Übertragung erfolgt daher per SFTP
+# mit lftp, die Anwendungsbibliotheken werden vorher auf dem Läufer gebaut.
+#
+# WAS DIESES DEPLOYMENT NICHT TUT
+# - Es löscht nichts. "mirror" läuft ohne --delete; auf dem Server nicht mehr
+#   benötigte Dateien bleiben liegen und sind von Hand zu entfernen.
+# - Es spielt KEINE Datenbankänderungen ein. Bringt eine Lieferung
+#   Migrationen mit, ist danach tools/web-setup/update.php erforderlich.
+# - Es setzt keine Zugangsdaten. Die .env auf dem Server wird nie überschrieben.
+#
+# WAS BEWUSST NICHT ÜBERTRAGEN WIRD
+#   .env und .env.*        Zugangsdaten des Produktivsystems
+#   storage/**             Dokumente, Protokolle, Sitzungen, Sicherungen
+#   bootstrap/cache/**     Zwischenspeicher des Servers
+#   database/*.sqlite      Entwicklungsdatenbank
+#   tests/, tools/, docs/  nicht Bestandteil des Betriebs; tools/ enthält die
+#                          Einrichtungswerkzeuge und gehört nicht dauerhaft
+#                          auf den Server
+#   node_modules/, .git*, .github/, .claude/, CLAUDE.md
+#
+# Die Ausschlussmuster wurden mit lftp gegen ein Testverzeichnis geprüft.
+#
+# BENÖTIGTE SECRETS (Repository, Settings, Secrets and variables, Actions)
+#   SFTP_HOST       Serveradresse des Webspace
+#   SFTP_USERNAME   SFTP-Benutzer
+#   SFTP_PASSWORD   Kennwort des SFTP-Benutzers
+#   SFTP_TARGET     Zielverzeichnis, in dem app/, public/ und vendor/ liegen
+#   SFTP_PORT       optional, Vorgabe 22
+#   HEALTHCHECK_URL optional, Adresse für die Erreichbarkeitsprüfung
+# ---------------------------------------------------------------------------
+
+name: Deployment auf IONOS
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Zwei Übertragungen gleichzeitig würden einen halb aktualisierten Stand
+# hinterlassen. Laufende Übertragungen werden deshalb nicht abgebrochen,
+# sondern abgewartet.
+concurrency:
+  group: ionos-produktion
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Übertragung nach IONOS
+    runs-on: ubuntu-24.04
+    # Die erste Übertragung umfasst rund 10.000 Dateien, danach nur noch die
+    # geänderten. Die Zeitgrenze ist auf den ersten Durchlauf ausgelegt.
+    timeout-minutes: 45
+
+    # Über diese Umgebung lässt sich im Repository eine Freigabe durch eine
+    # zweite Person erzwingen (Settings, Environments, Required reviewers).
+    # Ohne Regeln wirkt der Eintrag nicht einschränkend.
+    environment: produktion
+
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: PHP einrichten
+        # Feste Fassung 8.4, weil der Webspace PHP 8.4 ausführt. Die
+        # Bibliotheken müssen zur Laufzeitfassung des Servers passen.
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.4'
+          extensions: bcmath, curl, dom, fileinfo, gd, libxml, mbstring, pdo, pdo_mysql, zip
+          coverage: none
+
+      - name: Bibliotheken aus dem Zwischenspeicher holen
+        # Ohne Zwischenspeicher trägt jede Übertragung das komplette
+        # Verzeichnis vendor/ erneut, weil die Zeitstempel eines frischen
+        # Auscheckens immer neu sind.
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: vendor-php84-${{ hashFiles('composer.lock') }}
+
+      - name: PHP-Abhängigkeiten installieren
+        if: ${{ hashFiles('composer.lock') != '' }}
+        # --no-scripts: package:discover würde bootstrap/cache/packages.php
+        # erzeugen, und diese Datei wird bewusst nicht übertragen. Der Server
+        # legt sie beim ersten Aufruf selbst an.
+        run: >
+          composer install
+          --no-dev
+          --prefer-dist
+          --no-interaction
+          --no-progress
+          --optimize-autoloader
+          --no-scripts
+
+      - name: Frontend bauen
+        # Der Schritt entfällt, solange keine package-lock.json vorliegt. Die
+        # Oberfläche verwendet die im Repository liegenden Dateien unter
+        # public/css und public/vendor, kein CDN.
+        if: ${{ hashFiles('package-lock.json') != '' }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Zugangsdaten prüfen
+        env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
+          SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+          SFTP_TARGET: ${{ secrets.SFTP_TARGET }}
+        run: |
+          fehlend=""
+          for name in SFTP_HOST SFTP_USERNAME SFTP_PASSWORD SFTP_TARGET; do
+            if [ -z "${!name}" ]; then
+              fehlend="$fehlend $name"
+            fi
+          done
+          if [ -n "$fehlend" ]; then
+            echo "Es fehlen folgende Secrets:$fehlend" >&2
+            echo "Einzutragen unter Settings, Secrets and variables, Actions." >&2
+            exit 1
+          fi
+          echo "Alle benötigten Secrets sind hinterlegt."
+
+      - name: lftp installieren
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+
+      - name: Dateien zu IONOS übertragen
+        env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_PORT: ${{ secrets.SFTP_PORT }}
+          SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
+          SFTP_TARGET: ${{ secrets.SFTP_TARGET }}
+          LFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+        run: |
+          lftp <<LFTP
+          set cmd:fail-exit yes
+          set sftp:auto-confirm yes
+          set net:max-retries 2
+          set net:timeout 30
+          set net:reconnect-interval-base 5
+          open --user "$SFTP_USERNAME" --env-password -p "${SFTP_PORT:-22}" "sftp://$SFTP_HOST"
+          mirror --reverse --verbose=1 --parallel=4 --no-perms --exclude-glob=.git --exclude-glob=.git/** --exclude-glob=.github/** --exclude-glob=.claude/** --exclude-glob=.env --exclude-glob=.env.* --exclude-glob=node_modules/** --exclude-glob=storage/** --exclude-glob=bootstrap/cache/** --exclude-glob=database/*.sqlite --exclude-glob=database/*.sqlite-* --exclude-glob=tests/** --exclude-glob=tools/** --exclude-glob=docs/** --exclude-glob=CLAUDE.md ./ "$SFTP_TARGET"
+          bye
+          LFTP
+
+      - name: Zwischenspeicher des Servers entfernen
+        # Der wichtigste Schritt nach der Übertragung. Solange
+        # bootstrap/cache/config.php liegt, wird die .env nicht gelesen und
+        # die zwischengespeicherten Routen zeigen auf den alten Stand: die
+        # Anwendung läuft dann weiter mit der vorherigen Fassung oder bricht
+        # mit einem Serverfehler 500 ab.
+        #
+        # cmd:fail-exit steht hier auf no, weil "glob rm" mit einem Muster
+        # ohne Treffer als Fehler gilt. Das Ergebnis wird im nächsten Schritt
+        # nachgewiesen, es wird also nichts stillschweigend übergangen.
+        env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_PORT: ${{ secrets.SFTP_PORT }}
+          SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
+          SFTP_TARGET: ${{ secrets.SFTP_TARGET }}
+          LFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+        run: |
+          lftp <<LFTP || true
+          set cmd:fail-exit no
+          set sftp:auto-confirm yes
+          set net:max-retries 2
+          set net:timeout 30
+          open --user "$SFTP_USERNAME" --env-password -p "${SFTP_PORT:-22}" "sftp://$SFTP_HOST"
+          rm -f "$SFTP_TARGET/bootstrap/cache/config.php"
+          rm -f "$SFTP_TARGET/bootstrap/cache/events.php"
+          glob rm -f "$SFTP_TARGET/bootstrap/cache/routes*.php"
+          glob rm -f "$SFTP_TARGET/storage/framework/views/*.php"
+          bye
+          LFTP
+
+      - name: Entfernen des Zwischenspeichers nachweisen
+        env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_PORT: ${{ secrets.SFTP_PORT }}
+          SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
+          SFTP_TARGET: ${{ secrets.SFTP_TARGET }}
+          LFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+        run: |
+          lftp <<LFTP > verzeichnis.txt
+          set cmd:fail-exit yes
+          set sftp:auto-confirm yes
+          set net:timeout 30
+          open --user "$SFTP_USERNAME" --env-password -p "${SFTP_PORT:-22}" "sftp://$SFTP_HOST"
+          cls -1 "$SFTP_TARGET/bootstrap/cache/"
+          bye
+          LFTP
+          echo "Inhalt von bootstrap/cache:"
+          cat verzeichnis.txt
+          if grep -qE '(^|/)(config|events|routes[^/]*)\.php$' verzeichnis.txt; then
+            echo "Der Zwischenspeicher liegt noch auf dem Server." >&2
+            echo "Die Anwendung würde mit dem vorherigen Stand weiterlaufen." >&2
+            echo "Bitte die genannten Dateien über den Dateimanager entfernen." >&2
+            exit 1
+          fi
+          echo "Konfigurations- und Routenzwischenspeicher sind entfernt."
+
+      - name: Erreichbarkeit prüfen
+        if: ${{ secrets.HEALTHCHECK_URL != '' }}
+        env:
+          HEALTHCHECK_URL: ${{ secrets.HEALTHCHECK_URL }}
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$HEALTHCHECK_URL" || echo "000")
+          echo "Antwort: HTTP $status"
+          case "$status" in
+            200|302|303) echo "Die Anwendung antwortet." ;;
+            *) echo "Die Anwendung antwortet nicht wie erwartet (HTTP $status)." >&2
+               echo "Bei HTTP 500 zuerst die .env prüfen, siehe docs/DEPLOYMENT.md, Abschnitt 6a." >&2
+               exit 1 ;;
+          esac
+
+      - name: Zusammenfassung
+        if: ${{ always() }}
+        run: |
+          {
+            echo "## Deployment auf IONOS"
+            echo ""
+            echo "- Stand: \`${GITHUB_SHA}\`"
+            echo "- Ergebnis der Übertragung: ${{ job.status }}"
+            echo ""
+            echo "### Nicht automatisch erledigt"
+            echo ""
+            echo "- **Datenbankänderungen.** Bringt diese Lieferung Migrationen mit,"
+            echo "  ist \`tools/web-setup/update.php\` erforderlich. Das Verzeichnis"
+            echo "  \`tools/\` wird nicht übertragen; die Datei ist mit"
+            echo "  Zugriffsschlüssel einzeln nach \`public/\` zu laden und danach"
+            echo "  zu löschen."
+            echo "- **Erneutes Zwischenspeichern.** Die Anwendung läuft nach der"
+            echo "  Übertragung ohne Zwischenspeicher, also langsamer. Das"
+            echo "  Optimieren erfolgt über dasselbe Werkzeug."
+            echo "- **Entfernte Dateien.** Auf dem Server nicht mehr benötigte"
+            echo "  Dateien bleiben liegen, weil ohne \`--delete\` gespiegelt wird."
+          } >> "$GITHUB_STEP_SUMMARY"

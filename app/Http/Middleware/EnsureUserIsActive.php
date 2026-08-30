@@ -13,6 +13,11 @@ class EnsureUserIsActive
     {
         $user = $request->user();
 
+        // Layout und Berechtigungsprüfungen greifen auf Rollen und
+        // Kontext-Zuordnungen zu; hier zentral laden, damit
+        // Model::preventLazyLoading keine Ausnahme wirft.
+        $user?->loadMissing(['roles', 'entityAssignments.entity']);
+
         if ($user && ! $user->is_active) {
             Auth::logout();
             $request->session()->invalidate();

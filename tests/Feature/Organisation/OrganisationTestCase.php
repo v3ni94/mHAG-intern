@@ -21,6 +21,10 @@ abstract class OrganisationTestCase extends TestCase
     {
         parent::setUp();
         $this->seed(RolePermissionSeeder::class);
+
+        // 2FA-Pflicht ist einstellungsgesteuert; für die Feature-Tests deaktiviert,
+        // damit Seitenaufrufe nicht zur 2FA-Einrichtung umgeleitet werden.
+        \App\Models\Setting::set('security', 'two_factor_required_roles', []);
     }
 
     protected function makeAdmin(): User

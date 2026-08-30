@@ -4,20 +4,57 @@ namespace App\Http\Requests\Loans;
 
 use App\Enums\InterestFrequency;
 use App\Enums\InterestMethod;
+use App\Enums\PaymentOrigin;
 use App\Enums\RepaymentModel;
 use App\Enums\RiskRating;
 use App\Models\Entity;
+use App\Services\Loans\DefaultInterestService;
+use App\Support\Money;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreLoanRequest extends LoansFormRequest
 {
-    protected array $moneyFields = ['principal_amount', 'credit_limit', 'disbursement_planned_amount'];
+    protected array $moneyFields = ['principal_amount', 'credit_limit'];
 
     protected array $percentFields = ['interest_rate', 'default_interest_rate'];
 
     public function authorize(): bool
     {
         return (bool) $this->user()?->can('loans.create');
+    }
+
+    /**
+     * Auszahlungszeilen (Abschnitt 31): leere Zeilen des wiederholbaren
+     * Formularblocks entfernen und die Betraege aus deutscher Schreibweise
+     * ("50.000,00") in Dezimalstrings wandeln.
+     */
+    protected function prepareForValidation(): void
+    {
+        parent::prepareForValidation();
+
+        $rows = $this->input('disbursements');
+        if (! is_array($rows)) {
+            return;
+        }
+
+        $cleaned = [];
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $amount = trim((string) ($row['amount'] ?? ''));
+            $date = trim((string) ($row['date'] ?? ''));
+            if ($amount === '' && $date === '') {
+                continue; // unausgefuellte Zeile: ignorieren
+            }
+            $row['amount'] = $amount === '' ? null : (Money::parse($amount) ?? $amount);
+            $row['date'] = $date === '' ? null : $date;
+            $row['status'] = trim((string) ($row['status'] ?? 'planned'));
+            $cleaned[] = $row;
+        }
+
+        $this->merge(['disbursements' => $cleaned]);
     }
 
     public function rules(): array
@@ -44,8 +81,14 @@ class StoreLoanRequest extends LoansFormRequest
             'interest_frequency' => ['required', Rule::enum(InterestFrequency::class)],
             'repayment_model' => ['required', Rule::enum(RepaymentModel::class)],
             'interest_rate' => ['required', 'numeric', 'gte:0', 'max:100'],
+            // Verzugszinsen (Abschnitt 44): ausschliesslich fachliche Vorgaben,
+            // keine gesetzlichen Vorbelegungen.
             'default_interest_enabled' => ['nullable', 'boolean'],
             'default_interest_rate' => ['nullable', 'numeric', 'gte:0', 'max:100'],
+            'default_interest_start' => ['nullable', 'date'],
+            'default_interest_basis' => ['nullable', Rule::in(array_keys(DefaultInterestService::BASIS_LABELS))],
+            'default_interest_method' => ['nullable', Rule::enum(InterestMethod::class)],
+            'default_interest_mode' => ['nullable', Rule::in(array_keys(DefaultInterestService::MODE_LABELS))],
             'risk_rating' => ['nullable', Rule::enum(RiskRating::class)],
             'handler_user_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
             'project' => ['nullable', 'string', 'max:255'],

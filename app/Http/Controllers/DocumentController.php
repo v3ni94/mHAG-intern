@@ -9,7 +9,12 @@ use App\Http\Requests\Documents\StoreDocumentVersionRequest;
 use App\Models\Contract;
 use App\Models\Document;
 use App\Models\Entity;
+use App\Models\CorporateBodyMember;
+use App\Models\Guarantee;
 use App\Models\IdentityDocument;
+use App\Models\Investment;
+use App\Models\Payment;
+use App\Models\User;
 use App\Models\Loan;
 use App\Models\Reminder;
 use App\Models\Resolution;
@@ -39,6 +44,10 @@ class DocumentController extends Controller
         'resolution' => Resolution::class,
         'share_transaction' => ShareTransaction::class,
         'identity_document' => IdentityDocument::class,
+        'payment' => Payment::class,
+        'guarantee' => Guarantee::class,
+        'investment' => Investment::class,
+        'corporate_body_member' => CorporateBodyMember::class,
     ];
 
     /** Deutsche Labels der Verknüpfungsarten. */
@@ -50,6 +59,10 @@ class DocumentController extends Controller
         'resolution' => 'Beschluss',
         'share_transaction' => 'Aktienbewegung',
         'identity_document' => 'Ausweisdokument',
+        'payment' => 'Zahlung',
+        'guarantee' => 'Bürgschaft',
+        'investment' => 'Beteiligung',
+        'corporate_body_member' => 'Organmitglied (Vorstand, Aufsichtsrat)',
     ];
 
     /** Dokumenttypen (Abschnitt 57) mit deutschen Labels. */
@@ -126,7 +139,7 @@ class DocumentController extends Controller
     {
         $linkable = null;
         if ($request->filled('link_type')) {
-            $linkable = $this->resolveLinkable($request->input('link_type'), (int) $request->input('link_id'));
+            $linkable = $this->resolveLinkable($request->input('link_type'), (int) $request->input('link_id'), $request->user());
             if (! $linkable) {
                 return back()->withInput()->withErrors(['link_id' => 'Das angegebene Verknüpfungsziel wurde nicht gefunden.']);
             }
@@ -265,7 +278,7 @@ class DocumentController extends Controller
     {
         Document::visibleTo($request->user())->findOrFail($document->id);
 
-        $linkable = $this->resolveLinkable($request->input('link_type'), (int) $request->input('link_id'));
+        $linkable = $this->resolveLinkable($request->input('link_type'), (int) $request->input('link_id'), $request->user());
         if (! $linkable) {
             return back()->withErrors(['link_id' => 'Das angegebene Verknüpfungsziel wurde nicht gefunden.']);
         }
@@ -315,15 +328,83 @@ class DocumentController extends Controller
 
     // ------------------------------------------------------------------
 
-    /** Verknüpfungsziel ausschließlich über die Whitelist-Map auflösen. */
-    private function resolveLinkable(string $type, int $id): ?Model
+    /**
+     * Verknüpfungsziel ausschließlich über die Whitelist-Map auflösen und
+     * anschließend prüfen, ob der Benutzer darauf überhaupt Zugriff hat.
+     * Ohne diese Prüfung könnte ein externer Benutzer ein Dokument an einen
+     * fremden Vorgang hängen, indem er dessen Nummer errät.
+     */
+    private function resolveLinkable(string $type, int $id, ?User $user = null): ?Model
     {
         $class = self::LINKABLE_TYPES[$type] ?? null;
         if (! $class) {
             return null;
         }
 
-        return $class::query()->find($id);
+        $linkable = $class::query()->find($id);
+        if (! $linkable) {
+            return null;
+        }
+
+        $user = $user ?: request()->user();
+        if ($user && ! $this->mayLinkTo($linkable, $user)) {
+            return null;
+        }
+
+        return $linkable;
+    }
+
+    /**
+     * Darf der Benutzer Dokumente an dieses Objekt hängen?
+     *
+     * Interne Rollen sehen den Gesamtbestand. Externe Benutzer nur Vorgänge
+     * ihrer zugeordneten Entities; gesellschaftsrechtliche Objekte bleiben
+     * internen Rollen und den dafür berechtigten Organen vorbehalten.
+     */
+    private function mayLinkTo(Model $linkable, User $user): bool
+    {
+        if ($user->isInternal()) {
+            return true;
+        }
+
+        $eigeneEntities = $user->accessibleEntityIds();
+
+        if ($linkable instanceof Entity) {
+            return $eigeneEntities->contains($linkable->id);
+        }
+
+        if ($linkable instanceof Loan) {
+            return Loan::visibleTo($user)->whereKey($linkable->id)->exists();
+        }
+
+        // Vorgänge, die über ein Darlehen zugeordnet sind
+        foreach ([Contract::class, Security::class, Guarantee::class, Payment::class] as $klasse) {
+            if ($linkable instanceof $klasse) {
+                $linkable->loadMissing('loan');
+
+                return $linkable->loan !== null
+                    && Loan::visibleTo($user)->whereKey($linkable->loan->id)->exists();
+            }
+        }
+
+        if ($linkable instanceof IdentityDocument) {
+            return $eigeneEntities->contains($linkable->entity_id);
+        }
+
+        // Gesellschaftsrechtliche Objekte: nur mit der jeweiligen Berechtigung
+        if ($linkable instanceof ShareTransaction || $linkable instanceof Investment) {
+            return $user->can('shares.prepare');
+        }
+
+        if ($linkable instanceof Resolution) {
+            return $user->can('resolutions.update');
+        }
+
+        if ($linkable instanceof CorporateBodyMember) {
+            return $user->can('shares.prepare');
+        }
+
+        return false;
     }
 
     /** Ablagestruktur gem. Abschnitt 61 aus Verknüpfung und Dokumenttyp ableiten. */
@@ -380,6 +461,39 @@ class DocumentController extends Controller
 
         if ($linkable instanceof Resolution) {
             return ($folders['corporate'] ?? 'gesellschaft').'/beschluesse';
+        }
+
+        if ($linkable instanceof Payment) {
+            $linkable->loadMissing('loan');
+
+            return $linkable->loan
+                ? ($folders['loans'] ?? 'darlehen').'/'.$linkable->loan->loan_number.'/zahlungen'
+                : 'zahlungen';
+        }
+
+        if ($linkable instanceof Guarantee) {
+            $linkable->loadMissing('loan');
+
+            return $linkable->loan
+                ? ($folders['loans'] ?? 'darlehen').'/'.$linkable->loan->loan_number.'/sicherheiten'
+                : 'sicherheiten';
+        }
+
+        if ($linkable instanceof Investment) {
+            return ($folders['corporate'] ?? 'gesellschaft').'/beteiligungen';
+        }
+
+        if ($linkable instanceof CorporateBodyMember) {
+            $linkable->loadMissing('body');
+
+            // Ablage getrennt nach Gremium (Masterprompt 61)
+            $unterordner = match ($linkable->body?->type) {
+                'board' => 'vorstand',
+                'supervisory_board' => 'aufsichtsrat',
+                default => 'gesellschaft',
+            };
+
+            return ($folders['corporate'] ?? 'gesellschaft').'/'.$unterordner;
         }
 
         return 'sonstiges';

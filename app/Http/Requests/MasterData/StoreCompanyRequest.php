@@ -15,6 +15,7 @@ class StoreCompanyRequest extends MasterDataFormRequest
             'short_name', 'legal_form', 'founded_on', 'commercial_register', 'register_number',
             'register_court', 'tax_number', 'vat_id', 'business_id', 'website', 'email',
             'phone', 'fax', 'industry', 'tags', 'notes',
+            'address_street', 'address_house_number', 'address_addition', 'address_postal_code', 'address_city', 'address_country',
         ]);
     }
 
@@ -38,6 +39,14 @@ class StoreCompanyRequest extends MasterDataFormRequest
             'industry' => ['nullable', 'string', 'max:255'],
             'tags' => ['nullable', 'string', 'max:500'],
             'notes' => ['nullable', 'string', 'max:10000'],
+            // Anschrift beim Anlegen (optional, Masterprompt 6 und 7)
+            'address_type' => ['nullable', 'string', 'in:main,secondary,business,correspondence,historical'],
+            'address_street' => ['nullable', 'string', 'max:255'],
+            'address_house_number' => ['nullable', 'string', 'max:50'],
+            'address_addition' => ['nullable', 'string', 'max:255'],
+            'address_postal_code' => ['nullable', 'string', 'max:20'],
+            'address_city' => ['nullable', 'string', 'max:255'],
+            'address_country' => ['nullable', 'string', 'max:120'],
         ];
     }
 
@@ -61,6 +70,13 @@ class StoreCompanyRequest extends MasterDataFormRequest
             'industry' => 'Branche',
             'tags' => 'Tags',
             'notes' => 'Interne Notizen',
+                    'address_type' => 'Adressart',
+            'address_street' => 'Straße',
+            'address_house_number' => 'Hausnummer',
+            'address_addition' => 'Adresszusatz',
+            'address_postal_code' => 'PLZ',
+            'address_city' => 'Ort',
+            'address_country' => 'Land',
         ];
     }
 

@@ -59,4 +59,33 @@ abstract class MasterDataFormRequest extends FormRequest
             $this->merge($merge);
         }
     }
+
+    /**
+     * Anschrift aus dem Anlegen-Formular, sofern eine erfasst wurde.
+     *
+     * Ohne Straße und Ort wird keine Adresse angelegt: Ein leerer Datensatz
+     * hätte keinen fachlichen Wert und würde die Adressliste verwässern.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function initialAddressData(string $standardTyp = 'main'): ?array
+    {
+        $strasse = $this->input('address_street');
+        $ort = $this->input('address_city');
+
+        if (blank($strasse) && blank($ort)) {
+            return null;
+        }
+
+        return [
+            'type' => $this->input('address_type') ?: $standardTyp,
+            'street' => $strasse,
+            'house_number' => $this->input('address_house_number'),
+            'addition' => $this->input('address_addition'),
+            'postal_code' => $this->input('address_postal_code'),
+            'city' => $ort,
+            'country' => $this->input('address_country') ?: 'Deutschland',
+            'is_primary' => true,
+        ];
+    }
 }

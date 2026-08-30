@@ -12,6 +12,7 @@
     <form method="POST" action="{{ route('persons.store') }}">
         @csrf
         @include('persons.partials.form', ['person' => null, 'entity' => null])
+        @include('persons.partials.initial-address', ['addressType' => 'main'])
 
         <div class="d-flex gap-2">
             <button class="btn btn-primary"><i class="bi bi-check-lg"></i> Person anlegen</button>

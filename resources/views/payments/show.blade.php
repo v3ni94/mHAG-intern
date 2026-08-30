@@ -125,6 +125,45 @@
                     </table>
                 </div>
             </div>
+
+            {{--
+                Zahlungsbelege (Masterprompt 46 und 57). Die Verknüpfungen werden
+                hier ausdrücklich nachgeladen, damit die Ansicht ohne Änderung am
+                Controller auskommt und kein verdecktes Nachladen entsteht.
+            --}}
+            @php($belege = $payment->loadMissing('documentLinks.document')->documentLinks)
+            <div class="card mt-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Belege und Dokumente</span>
+                    @can('documents.upload')
+                        <a href="{{ route('documents.create', ['link_type' => 'payment', 'link_id' => $payment->id]) }}"
+                           class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-upload"></i> Beleg hochladen
+                        </a>
+                    @endcan
+                </div>
+                <div class="card-body p-0">
+                    <ul class="list-group list-group-flush">
+                        @forelse ($belege as $link)
+                            @if ($link->document)
+                                <li class="list-group-item small d-flex justify-content-between align-items-center">
+                                    <span>
+                                        <i class="bi bi-file-earmark me-1"></i>
+                                        <a href="{{ route('documents.show', $link->document) }}" class="text-decoration-none">
+                                            {{ $link->document->original_filename }}
+                                        </a>
+                                    </span>
+                                    <span class="text-muted">{{ format_date($link->document->document_date ?: $link->document->created_at) }}</span>
+                                </li>
+                            @endif
+                        @empty
+                            <li class="list-group-item">
+                                <x-empty-state icon="bi-folder2-open" message="Kein Beleg hinterlegt." />
+                            </li>
+                        @endforelse
+                    </ul>
+                </div>
+            </div>
         </div>
     </div>
 @endsection

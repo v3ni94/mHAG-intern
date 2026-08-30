@@ -26,7 +26,73 @@ use Illuminate\Support\Facades\DB;
  */
 class DisbursementService
 {
+    /**
+     * Sammelvorgang (mehrere Auszahlungen in einem Schritt): waehrend des
+     * Sammelvorgangs wird die Neuberechnung zurueckgestellt und am Ende
+     * genau einmal ab dem fruehesten betroffenen Datum ausgefuehrt.
+     */
+    protected bool $deferRecalculation = false;
+
     public function __construct(protected LoanRecalculationService $recalculation) {}
+
+    /**
+     * Mehrere Auszahlungen in einem Vorgang erfassen (Abschnitt 31):
+     * ein Darlehen wird in der Praxis in Teilbetraegen zu verschiedenen
+     * Tagen ausgezahlt; der Kapitalverlauf und damit die Zinsen folgen
+     * diesen Tagen taggenau.
+     *
+     * Jede Zeile: [
+     *   'planned_amount' => '50000.00', 'planned_date' => '2026-01-15',
+     *   'confirmed' => bool, 'origin' => PaymentOrigin|string|null,
+     *   'reference' => ?string, 'note' => ?string,
+     * ]
+     * Bestaetigte Zeilen werden geplant UND bestaetigt, damit die
+     * Kapitalbuchung mit Wirkungsdatum = Auszahlungsdatum entsteht.
+     * Am Ende folgt EINE Neuberechnung ab dem fruehesten Auszahlungsdatum.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<int, LoanDisbursement>
+     */
+    public function planMany(Loan $loan, array $rows, ?User $user = null): array
+    {
+        $created = [];
+        $earliest = null;
+
+        $this->deferRecalculation = true;
+
+        try {
+            foreach ($rows as $row) {
+                $disbursement = $this->plan($loan, $row, $user);
+
+                $dates = [Carbon::parse($row['planned_date'])->toDateString()];
+
+                if (! empty($row['confirmed'])) {
+                    $origin = $row['origin'] ?? PaymentOrigin::ManualEntered;
+                    if (! $origin instanceof PaymentOrigin) {
+                        $origin = PaymentOrigin::tryFrom((string) $origin) ?? PaymentOrigin::ManualEntered;
+                    }
+                    $this->confirm(
+                        $disbursement,
+                        Money::normalize($row['planned_amount']),
+                        Carbon::parse($row['planned_date']),
+                        $origin,
+                        $user,
+                    );
+                }
+
+                $created[] = $disbursement->refresh();
+                $earliest = $earliest === null ? min($dates) : min($earliest, ...$dates);
+            }
+        } finally {
+            $this->deferRecalculation = false;
+        }
+
+        if ($earliest !== null) {
+            $this->recalculation->recalculate($loan, 'disbursements_recorded', Carbon::parse($earliest), $user);
+        }
+
+        return $created;
+    }
 
     /**
      * Auszahlung planen. data: planned_amount, planned_date, optional
@@ -61,7 +127,7 @@ class DisbursementService
             'planned_date' => $plannedDate,
         ]);
 
-        $this->recalculation->recalculate($loan, 'disbursement_planned', Carbon::parse($plannedDate), $user);
+        $this->triggerRecalculation($loan, 'disbursement_planned', Carbon::parse($plannedDate), $user);
 
         return $disbursement->refresh();
     }
@@ -118,7 +184,7 @@ class DisbursementService
         ]);
 
         $earliest = min($d->planned_date->toDateString(), $actualDateStr);
-        $this->recalculation->recalculate($d->loan()->firstOrFail(), 'disbursement_confirmed', Carbon::parse($earliest), $user);
+        $this->triggerRecalculation($d->loan()->firstOrFail(), 'disbursement_confirmed', Carbon::parse($earliest), $user);
     }
 
     /**
@@ -145,7 +211,7 @@ class DisbursementService
 
         AuditService::log('loans.disbursement_failed', $d, $old, ['note' => $note]);
 
-        $this->recalculation->recalculate($d->loan()->firstOrFail(), 'disbursement_failed', Carbon::parse($d->planned_date->toDateString()), $user);
+        $this->triggerRecalculation($d->loan()->firstOrFail(), 'disbursement_failed', Carbon::parse($d->planned_date->toDateString()), $user);
     }
 
     /** Geplante Auszahlung stornieren; bereits Gebuchtes wird gegengebucht. */
@@ -169,7 +235,21 @@ class DisbursementService
 
         AuditService::log('loans.disbursement_cancelled', $d, $old, ['reason' => $reason]);
 
-        $this->recalculation->recalculate($d->loan()->firstOrFail(), 'disbursement_cancelled', Carbon::parse($d->planned_date->toDateString()), $user);
+        $this->triggerRecalculation($d->loan()->firstOrFail(), 'disbursement_cancelled', Carbon::parse($d->planned_date->toDateString()), $user);
+    }
+
+    /**
+     * Neuberechnung anstossen, sofern kein Sammelvorgang laeuft
+     * (Abschnitt 35: jede kapitalwirksame Aktion rechnet neu; ein
+     * Sammelvorgang rechnet gebuendelt genau einmal am Ende).
+     */
+    protected function triggerRecalculation(Loan $loan, string $trigger, CarbonInterface $earliest, ?User $user): void
+    {
+        if ($this->deferRecalculation) {
+            return;
+        }
+
+        $this->recalculation->recalculate($loan, $trigger, $earliest, $user);
     }
 
     /**

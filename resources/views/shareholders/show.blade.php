@@ -106,7 +106,15 @@
             @endcan
 
             <div class="card">
-                <div class="card-header">Dokumente</div>
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Dokumente</span>
+                    @can('documents.upload')
+                        <a href="{{ route('documents.create', ['link_type' => 'entity', 'link_id' => $shareholder->entity_id]) }}"
+                           class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-upload"></i> Hochladen
+                        </a>
+                    @endcan
+                </div>
                 <div class="card-body p-0">
                     <ul class="list-group list-group-flush">
                         @forelse ($shareholder->documentLinks->merge($entityDocuments) as $link)

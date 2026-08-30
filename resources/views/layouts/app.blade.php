@@ -253,6 +253,25 @@
             });
         }
     })();
+
+    // Kontextbezogene Hilfe (Abschnitt 112) und Feldtooltips (Abschnitt 117):
+    // Bootstrap-Popovers und -Tooltips müssen ausdrücklich initialisiert werden,
+    // sonst bleibt der hinterlegte Hilfetext unsichtbar.
+    (function () {
+        if (typeof bootstrap === 'undefined') {
+            return;
+        }
+        document.querySelectorAll('[data-bs-toggle="popover"]').forEach(function (el) {
+            if (!bootstrap.Popover.getInstance(el)) {
+                new bootstrap.Popover(el, { container: 'body', html: false });
+            }
+        });
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+            if (!bootstrap.Tooltip.getInstance(el)) {
+                new bootstrap.Tooltip(el, { container: 'body' });
+            }
+        });
+    })();
 </script>
 @stack('scripts')
 </body>

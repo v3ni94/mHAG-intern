@@ -14,6 +14,7 @@ class StorePersonRequest extends MasterDataFormRequest
         $this->normalizeEmptyToNull([
             'salutation', 'title', 'middle_names', 'birth_name', 'date_of_birth',
             'place_of_birth', 'nationality', 'gender', 'marital_status', 'tags', 'notes',
+            'address_street', 'address_house_number', 'address_addition', 'address_postal_code', 'address_city', 'address_country',
         ]);
     }
 
@@ -33,6 +34,14 @@ class StorePersonRequest extends MasterDataFormRequest
             'marital_status' => ['nullable', 'string', 'max:100'],
             'tags' => ['nullable', 'string', 'max:500'],
             'notes' => ['nullable', 'string', 'max:10000'],
+            // Anschrift beim Anlegen (optional, Masterprompt 6 und 7)
+            'address_type' => ['nullable', 'string', 'in:main,secondary,business,correspondence,historical'],
+            'address_street' => ['nullable', 'string', 'max:255'],
+            'address_house_number' => ['nullable', 'string', 'max:50'],
+            'address_addition' => ['nullable', 'string', 'max:255'],
+            'address_postal_code' => ['nullable', 'string', 'max:20'],
+            'address_city' => ['nullable', 'string', 'max:255'],
+            'address_country' => ['nullable', 'string', 'max:120'],
         ];
     }
 
@@ -52,6 +61,13 @@ class StorePersonRequest extends MasterDataFormRequest
             'marital_status' => 'Familienstand',
             'tags' => 'Tags',
             'notes' => 'Interne Notizen',
+                    'address_type' => 'Adressart',
+            'address_street' => 'Straße',
+            'address_house_number' => 'Hausnummer',
+            'address_addition' => 'Adresszusatz',
+            'address_postal_code' => 'PLZ',
+            'address_city' => 'Ort',
+            'address_country' => 'Land',
         ];
     }
 

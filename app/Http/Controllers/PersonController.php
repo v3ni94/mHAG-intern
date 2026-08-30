@@ -88,6 +88,11 @@ class PersonController extends Controller
                 'notes' => $request->validated('notes'),
             ]);
             $entity->person()->create($request->personData());
+
+            // Anschrift aus dem Anlegen-Formular übernehmen (Masterprompt 6)
+            if ($adresse = $request->initialAddressData('main')) {
+                $entity->addresses()->create($adresse);
+            }
             $entity->load('person');
             $entity->refreshDisplayName();
 

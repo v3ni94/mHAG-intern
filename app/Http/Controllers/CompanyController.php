@@ -91,6 +91,12 @@ class CompanyController extends Controller
                 'notes' => $request->validated('notes'),
             ]);
             $entity->company()->create($request->companyData());
+
+            // Anschrift aus dem Anlegen-Formular übernehmen (Masterprompt 7)
+            if ($adresse = $request->initialAddressData('business')) {
+                $entity->addresses()->create($adresse);
+            }
+
             $entity->load('company');
 
             return $entity;

@@ -310,6 +310,10 @@ class ShareholdingService
     {
         $holdings = $this->holdingsAsOf($asOf)->filter(fn (array $row) => $row['shares'] > 0)->values();
 
+        // Anschriften für den Snapshot nachladen (kein Lazy Loading)
+        \Illuminate\Database\Eloquent\Collection::make($holdings->pluck('shareholder'))
+            ->load('entity.addresses');
+
         $companyEntity = Entity::query()
             ->with(['company', 'addresses'])
             ->find(Setting::get('holding', 'company_entity_id'));
@@ -319,9 +323,7 @@ class ShareholdingService
         $rows = $holdings->map(function (array $row) {
             /** @var Shareholder $shareholder */
             $shareholder = $row['shareholder'];
-            $entityAddress = $shareholder->entity?->addresses?->count()
-                ? $shareholder->entity->primaryAddress()
-                : $shareholder->entity?->addresses()->orderByDesc('is_primary')->first();
+            $entityAddress = $shareholder->entity?->primaryAddress();
 
             return [
                 'shareholder_number' => $shareholder->shareholder_number,

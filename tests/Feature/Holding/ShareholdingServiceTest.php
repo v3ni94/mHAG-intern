@@ -100,7 +100,7 @@ class ShareholdingServiceTest extends HoldingTestCase
             'seller_shareholder_id' => $timo->id,
             'buyer_shareholder_id' => $buyer->id,
             'share_count' => 30000,
-            'economic_transfer_date' => now()->subDay()->toDateString(),
+            'economic_transfer_date' => now()->toDateString(),
         ]);
         $this->service->makeEffective($sale);
         $this->assertSame(70000, $this->service->sharesOf($timo));

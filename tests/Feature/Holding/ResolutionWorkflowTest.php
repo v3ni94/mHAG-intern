@@ -145,7 +145,7 @@ class ResolutionWorkflowTest extends HoldingTestCase
             'company_entity_id' => $this->mhagEntityId(),
         ]);
 
-        $resolution = Resolution::query()->latest('id')->firstOrFail();
+        $resolution = Resolution::query()->with('participants.entity')->latest('id')->firstOrFail();
         $this->assertMatchesRegularExpression('/^AR-\d{4}-\d{3}$/', $resolution->resolution_number);
 
         // Aufsichtsrat der MHAG: Walprecht (Vorsitz), Schuhwirt, Enns

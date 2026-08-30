@@ -65,7 +65,7 @@ class ShareholderListSnapshotTest extends HoldingTestCase
         $download = $this->get(route('shareholders.list.download', $snapshot));
         $download->assertOk();
         $download->assertHeader('Content-Type', 'application/pdf');
-        $this->assertStringStartsWith('%PDF', $download->streamedContent() ?: $download->getContent());
+        $this->assertStringStartsWith('%PDF', $download->getContent());
     }
 
     public function test_snapshot_erzeugen_erfordert_berechtigung_shares_list(): void

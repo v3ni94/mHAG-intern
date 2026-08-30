@@ -94,12 +94,54 @@ class StoreLoanRequest extends LoansFormRequest
             'project' => ['nullable', 'string', 'max:255'],
             'cost_center' => ['nullable', 'string', 'max:255'],
             'internal_notes' => ['nullable', 'string', 'max:65000'],
-            // Optional: Auszahlung direkt planen (Abschnitt 31)
-            'plan_disbursement' => ['nullable', 'boolean'],
-            'disbursement_planned_amount' => ['nullable', 'required_if:plan_disbursement,1', 'numeric', 'gt:0'],
-            'disbursement_planned_date' => ['nullable', 'required_if:plan_disbursement,1', 'date'],
-            'disbursement_reference' => ['nullable', 'string', 'max:255'],
+            // Auszahlungen (Abschnitt 31): beliebig viele Teilauszahlungen mit
+            // Datum, Betrag und Status. Bestaetigte Zeilen erzeugen sofort die
+            // Kapitalbuchung, damit der Zinsverlauf taggenau stimmt.
+            'disbursements' => ['nullable', 'array', 'max:120'],
+            'disbursements.*.date' => ['required', 'date'],
+            'disbursements.*.amount' => ['required', 'numeric', 'gt:0'],
+            'disbursements.*.status' => ['required', Rule::in(['planned', 'confirmed'])],
+            'disbursements.*.origin' => ['nullable', Rule::enum(PaymentOrigin::class)],
+            'disbursements.*.reference' => ['nullable', 'string', 'max:255'],
         ];
+    }
+
+    /**
+     * Summe der Auszahlungen gegen den Darlehensrahmen pruefen
+     * (Rahmen = credit_limit, sonst Darlehenssumme). Eine kleinere Summe
+     * ist zulaessig (Teilauszahlung), eine groessere nicht.
+     */
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator) {
+            $rows = $this->input('disbursements');
+            if (! is_array($rows) || $rows === []) {
+                return;
+            }
+
+            $limit = Money::parse((string) $this->input('credit_limit'))
+                ?? Money::parse((string) $this->input('principal_amount'));
+            if ($limit === null || ! Money::isPositive($limit)) {
+                return;
+            }
+
+            $sum = '0.00';
+            foreach ($rows as $row) {
+                $amount = is_array($row) ? ($row['amount'] ?? null) : null;
+                if ($amount === null || $amount === '' || ! is_numeric($amount)) {
+                    return; // Betragsfehler melden die Feldregeln
+                }
+                $sum = Money::add($sum, $amount);
+            }
+
+            if (Money::cmp($sum, $limit) > 0) {
+                $validator->errors()->add('disbursements', sprintf(
+                    'Die Summe der Auszahlungen (%s) übersteigt den Darlehensrahmen (%s). Bitte Beträge oder Rahmen korrigieren.',
+                    Money::format($sum),
+                    Money::format($limit),
+                ));
+            }
+        });
     }
 
     public function attributes(): array
@@ -126,15 +168,21 @@ class StoreLoanRequest extends LoansFormRequest
             'interest_rate' => 'Zinssatz',
             'default_interest_enabled' => 'Verzugszinsen aktiv',
             'default_interest_rate' => 'Verzugszinssatz',
+            'default_interest_start' => 'Verzugsbeginn',
+            'default_interest_basis' => 'Berechnungsgrundlage der Verzugszinsen',
+            'default_interest_method' => 'Zinsmethode der Verzugszinsen',
+            'default_interest_mode' => 'Aktivierung der Verzugszinsen',
             'risk_rating' => 'Risiko-Einstufung',
             'handler_user_id' => 'Sachbearbeiter',
             'project' => 'Projekt',
             'cost_center' => 'Kostenstelle',
             'internal_notes' => 'Interne Notizen',
-            'plan_disbursement' => 'Auszahlung planen',
-            'disbursement_planned_amount' => 'Geplanter Auszahlungsbetrag',
-            'disbursement_planned_date' => 'Geplantes Auszahlungsdatum',
-            'disbursement_reference' => 'Auszahlungsreferenz',
+            'disbursements' => 'Auszahlungen',
+            'disbursements.*.date' => 'Auszahlungsdatum',
+            'disbursements.*.amount' => 'Auszahlungsbetrag',
+            'disbursements.*.status' => 'Auszahlungsstatus',
+            'disbursements.*.origin' => 'Herkunft der Auszahlung',
+            'disbursements.*.reference' => 'Auszahlungsreferenz',
         ];
     }
 }

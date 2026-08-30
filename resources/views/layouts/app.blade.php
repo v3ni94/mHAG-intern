@@ -147,6 +147,22 @@
                 <a href="{{ route('admin.status') }}" class="{{ request()->routeIs('admin.status') ? 'active' : '' }}">
                     <i class="bi bi-heart-pulse"></i> Systemstatus
                 </a>
+                <a href="{{ route('onboarding.index') }}" class="{{ request()->routeIs('onboarding.*') ? 'active' : '' }}">
+                    <i class="bi bi-flag"></i> Erste Schritte
+                </a>
+                <a href="{{ route('admin.faq.index') }}" class="{{ request()->routeIs('admin.faq.*') ? 'active' : '' }}">
+                    <i class="bi bi-question-square"></i> FAQ-Verwaltung
+                </a>
+                <a href="{{ route('admin.changelog.index') }}" class="{{ request()->routeIs('admin.changelog.*') ? 'active' : '' }}">
+                    <i class="bi bi-stars"></i> Changelog
+                </a>
+                <a href="{{ route('admin.daily-facts.index') }}" class="{{ request()->routeIs('admin.daily-facts.*') ? 'active' : '' }}">
+                    <i class="bi bi-lightbulb"></i> Wussten Sie?
+                </a>
+                <a href="{{ route('help.page', 'datenimport') }}" class="{{ request()->fullUrlIs(route('help.page', 'datenimport')) ? 'active' : '' }}">
+                    <i class="bi bi-file-earmark-arrow-up"></i> Datenimport
+                    <span class="badge text-bg-secondary ms-1">nicht verfügbar</span>
+                </a>
             @endcan
         </nav>
     </aside>
@@ -221,6 +237,7 @@
 
         <main class="mhag-content">
             @include('partials.flash')
+            @include('onboarding.banner')
             @yield('content')
         </main>
 

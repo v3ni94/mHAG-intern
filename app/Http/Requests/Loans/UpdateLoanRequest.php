@@ -43,8 +43,13 @@ class UpdateLoanRequest extends LoansFormRequest
             'interest_method' => ['required', Rule::enum(InterestMethod::class)],
             'interest_frequency' => ['required', Rule::enum(InterestFrequency::class)],
             'repayment_model' => ['required', Rule::enum(RepaymentModel::class)],
+            // Verzugszinsen (Abschnitt 44): nur fachliche Vorgaben, keine Vorbelegung
             'default_interest_enabled' => ['nullable', 'boolean'],
             'default_interest_rate' => ['nullable', 'numeric', 'gte:0', 'max:100'],
+            'default_interest_start' => ['nullable', 'date'],
+            'default_interest_basis' => ['nullable', Rule::in(array_keys(\App\Services\Loans\DefaultInterestService::BASIS_LABELS))],
+            'default_interest_method' => ['nullable', Rule::enum(InterestMethod::class)],
+            'default_interest_mode' => ['nullable', Rule::in(array_keys(\App\Services\Loans\DefaultInterestService::MODE_LABELS))],
             'risk_rating' => ['nullable', Rule::enum(RiskRating::class)],
             'handler_user_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
             'project' => ['nullable', 'string', 'max:255'],

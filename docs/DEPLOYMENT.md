@@ -163,141 +163,83 @@ php artisan up
 Die Bibliotheken werden auf dem Läufer mit PHP 8.4 gebaut, passend zur
 Laufzeitfassung des Webspace.
 
-Auslöser: Push auf `main` oder `master`, sowie manuell über
-"Run workflow". Solange keiner dieser Zweige besteht, greift ausschließlich
-der manuelle Auslöser.
+### Warum überhaupt
 
-Erforderliche Secrets unter Settings, Secrets and variables, Actions:
+Am 05.09.2026 hat ein Upload über ein FTP-Programm das Verzeichnis `public/`
+ersetzt statt ergänzt und damit `index.php` und `.htaccess` entfernt. Die
+Anwendung war nicht mehr erreichbar. Dieser Ablauf schließt genau das aus: er
+überträgt nur geänderte Dateien und löscht nie etwas.
 
-| Secret | Bedeutung |
+### Auslöser
+
+| Auslöser | Zustand |
 | --- | --- |
-| `SFTP_HOST` | Serveradresse des Webspace |
-| `SFTP_USERNAME` | SFTP-Benutzer |
-| `SFTP_PASSWORD` | Kennwort des SFTP-Benutzers |
-| `SFTP_TARGET` | Zielverzeichnis, in dem `app/`, `public/` und `vendor/` liegen |
-| `SFTP_PORT` | optional, Vorgabe 22 |
-| `HEALTHCHECK_URL` | optional, Adresse für die Erreichbarkeitsprüfung |
+| Manuell, "Run workflow" | sofort nutzbar, Branch frei wählbar |
+| Push auf `main` oder `master` | erst wenn ein solcher Branch besteht |
 
-Nicht übertragen werden `.env`, `storage/` (Dokumente, Protokolle,
-Sitzungen), `bootstrap/cache/`, die Entwicklungsdatenbank sowie `tests/`,
-`tools/`, `docs/`, `node_modules/` und `CLAUDE.md`.
+Am Ursprung besteht derzeit nur der Arbeitszweig, und er ist zugleich der
+Standardbranch. Der automatische Auslöser greift deshalb nicht. Das ist
+Absicht: ein Ablauf, der jeden Commit eines Arbeitszweigs auf das
+Produktivsystem schreibt, wäre gefährlich. Wer automatisch ausliefern will,
+legt `main` an und führt dorthin zusammen, was live gehen soll.
+
+### Secrets hinterlegen
+
+Im Repository unter **Settings → Secrets and variables → Actions → New
+repository secret**:
+
+| Secret | Wert | Woher |
+| --- | --- | --- |
+| `SFTP_HOST` | Serveradresse des Webspace | eigene `.env` (`SFTP_HOST`) oder IONOS-Panel |
+| `SFTP_USERNAME` | SFTP-Benutzer | ebenda |
+| `SFTP_PASSWORD` | Kennwort des SFTP-Benutzers | IONOS-Panel |
+| `SFTP_TARGET` | `/homepages/43/d866575280/htdocs/Mueller-HoldingAG/Intranet` | Pfad der Anwendung |
+| `SFTP_PORT` | optional, Vorgabe 22 | |
+| `HEALTHCHECK_URL` | optional, z. B. `https://intranet.mueller-holding.ag/login` | |
+
+Der Ablauf prüft die Secrets als ersten Schritt und benennt fehlende, statt
+mitten in der Übertragung abzubrechen.
+
+### Freigabe durch eine zweite Person
+
+Der Ablauf läuft in der Umgebung `produktion`. Unter **Settings →
+Environments → produktion → Required reviewers** lässt sich eine Freigabe
+erzwingen. Bei einem Ablauf, der direkt auf das Produktivsystem schreibt, ist
+das zu empfehlen.
+
+### Was übertragen wird
+
+Nicht übertragen werden `.env` und `.env.*`, `storage/` (Dokumente,
+Protokolle, Sitzungen), `bootstrap/cache/`, die Entwicklungsdatenbank sowie
+`tests/`, `tools/`, `docs/`, `node_modules/` und `CLAUDE.md`. Übertragen
+werden `app/`, `config/`, `routes/`, `resources/`, `public/`, `vendor/`,
+`database/migrations/`, `bootstrap/app.php` und `cron.php`.
+
+Die Ausschlussmuster sind mit lftp gegen ein Testverzeichnis geprüft.
 
 Gespiegelt wird **ohne** `--delete`: auf dem Server nicht mehr benötigte
 Dateien bleiben liegen und sind von Hand zu entfernen. Das ist bewusst so
 gewählt, damit ein fehlerhaftes Muster keine Produktivdaten löscht.
 
-Nach der Übertragung entfernt der Ablauf `bootstrap/cache/config.php`,
-`bootstrap/cache/events.php`, `bootstrap/cache/routes*.php` und die
-vorkompilierten Oberflächen. Ein eigener Schritt weist nach, dass sie
-tatsächlich weg sind, und lässt den Ablauf sonst scheitern. Ohne diesen
-Schritt liefe die Anwendung mit dem vorherigen Stand weiter.
+### Nach der Übertragung
+
+Der Ablauf entfernt `bootstrap/cache/config.php`, `bootstrap/cache/events.php`,
+`bootstrap/cache/routes*.php` und die vorkompilierten Oberflächen. Ein eigener
+Schritt weist nach, dass sie tatsächlich weg sind, und lässt den Ablauf sonst
+scheitern. Ohne diesen Schritt liefe die Anwendung mit dem vorherigen Stand
+weiter.
 
 Zwei Dinge erledigt der Ablauf **nicht**:
 
 1. **Datenbankänderungen.** Bringt eine Lieferung Migrationen mit, ist
    `tools/web-setup/update.php` mit Zugriffsschlüssel einzeln nach `public/`
-   zu laden, auszuführen und danach zu löschen.
+   zu laden, auszuführen und danach zu löschen. `tools/` wird absichtlich
+   nicht übertragen.
 2. **Erneutes Zwischenspeichern.** Die Anwendung läuft nach der Übertragung
    ohne Zwischenspeicher, also langsamer. Das Optimieren erfolgt über
    dasselbe Werkzeug.
 
-Über die Umgebung `produktion` lässt sich im Repository eine Freigabe durch
-eine zweite Person erzwingen (Settings, Environments, Required reviewers).
-
-## 5a. Täglicher Lauf auf Webspace ohne Kommandozeile
-
-Die Anwendung hat einen Zeitplan (`routes/console.php`):
-
-| Uhrzeit | Aufgabe |
-| --- | --- |
-| 02:00 | Datenbanksicherung |
-| 04:30 | Fortschreibung fälliger Zahlungsplan-Positionen |
-| 05:30 | Prüfung von Fälligkeiten, Abläufen und Wiedervorlagen |
-
-Dieser Zeitplan läuft nur, wenn ihn jemand anstößt. Auf dem IONOS-Webspace
-gibt es dafür keine Kommandozeile, deshalb liegt `cron.php` im
-Wurzelverzeichnis der Anwendung bereit.
-
-**Wichtig:** Ohne diesen Aufruf läuft keine der drei Aufgaben, auch die
-Datenbanksicherung nicht.
-
-### Einrichtung im IONOS-Panel
-
-Cron-Jobs, neuen Auftrag anlegen:
-
-| Feld | Wert |
-| --- | --- |
-| Skript | `/homepages/.../Intranet/cron.php` (voller Pfad zur Datei) |
-| PHP-Fassung | 8.4 |
-| Zeitplan | täglich, etwa 01:30 Uhr |
-
-Der Zeitpunkt muss vor der frühesten geplanten Aufgabe liegen. Ein
-häufigerer Aufruf, etwa stündlich, ist unschädlich: der Zeitplan führt jede
-Aufgabe nur zu ihrer eigenen Uhrzeit aus.
-
-`cron.php` liegt bewusst **nicht** in `public/` und ist deshalb über das
-Internet nicht erreichbar. Zusätzlich verweigert die Datei den Dienst, wenn
-sie nicht über die Kommandozeile aufgerufen wird.
-
-### Nachweis, dass der Lauf stattgefunden hat
-
-Jeder Lauf schreibt einen Eintrag in `storage/logs/laravel-*.log`:
-
-```
-Täglicher Lauf ausgeführt (cron.php).
-```
-
-Fehlt der Eintrag, wurde der Cronjob nicht ausgeführt. Ohne diesen Nachweis
-ließe sich nicht unterscheiden, ob nichts zu tun war oder der Auftrag gar
-nicht lief.
-
-### Mit Kommandozeile
-
-Dort gilt der reguläre Weg, siehe Abschnitt 4:
-
-```
-* * * * * cd /var/www/intranet && php artisan schedule:run >> /dev/null 2>&1
-```
-
-## 6a. Serverfehler 500 auf jeder Seite
-
-Erster Verdacht ist die `.env`, nicht der Anwendungscode. Die Datei wird
-gelesen, bevor Laravel eine Fehlerbehandlung besitzt: bei einer ungültigen
-Zeile wird HTTP 500 gesetzt, die Meldung geht nach `stderr` und der Prozess
-endet mit `exit`. In der Antwort und im Anwendungsprotokoll steht dann nichts.
-
-Solange `bootstrap/cache/config.php` vorhanden ist, wird die `.env` nicht
-gelesen. Ein Fehler bleibt deshalb verdeckt und wirkt erst, wenn der
-Zwischenspeicher geleert wird, also typischerweise direkt nach einem Upload.
-
-Mit Kommandozeile:
-
-```bash
-php artisan config:clear     # zeigt die Meldung im Klartext
-```
-
-Ohne Kommandozeile: `tools/web-setup/notfall.php` mit Zugriffsschlüssel nach
-`public/` hochladen und aufrufen. Die Seite prüft die `.env` zeilenweise, ohne
-Werte anzuzeigen, und kann die Zwischenspeicher auf Dateiebene entfernen.
-Beschreibung in `tools/web-setup/LIESMICH.md`.
-
-Häufigste Ursache: Reste eines mehrzeiligen Wertes, etwa
-`-----END OPENSSH PRIVATE KEY-----`, nach dem Entfernen eines privaten
-Schlüssels von Hand. Solche Zeilen haben kein Gleichheitszeichen und sind
-weder Einstellung noch Kommentar.
-
-Zweite häufige Ursache: **`APP_KEY` fehlt in der `.env`.** `config/app.php`
-liest den Schlüssel über `env('APP_KEY')`; solange die Konfiguration
-zwischengespeichert ist, stammt der Wert aus dem Zwischenspeicher. Fällt
-dieser weg, wirft `Illuminate\Encryption` eine `MissingAppKeyException`. Weil
-die Sitzung verschlüsselt geführt wird, scheitert dann auch die Fehlerseite,
-und es bleibt ein Serverfehler 500 ohne Inhalt. Im Aufrufstapel erkennbar an
-`SessionManager::buildEncryptedSession()`.
-
-Ein neuer Schlüssel macht die mit dem alten Schlüssel verschlüsselten Felder
-unlesbar. In dieser Anwendung sind das ausschließlich die Geheimnisse der
-Zwei-Faktor-Anmeldung; sie sind danach je Benutzer zurückzusetzen. Fachdaten,
-Beträge und Dokumente liegen unverschlüsselt und sind nicht betroffen.
+Die Zusammenfassung jedes Laufs weist auf beides hin.
 
 ## 6c. Nach einem Wechsel des Anwendungsschlüssels
 

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AllocationBucket;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -12,7 +13,7 @@ class PaymentAllocation extends Model
     protected function casts(): array
     {
         return [
-            'bucket' => \App\Enums\AllocationBucket::class,
+            'bucket' => AllocationBucket::class,
             'amount' => 'decimal:2',
         ];
     }

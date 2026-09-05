@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\AssignmentContext;
+use App\Enums\EntityScopeMode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Organisation\UserStoreRequest;
 use App\Http\Requests\Organisation\UserUpdateRequest;
 use App\Mail\UserAccountChangedMail;
 use App\Mail\UserCredentialsMail;
 use App\Models\Entity;
+use App\Models\LoginAttempt;
 use App\Models\User;
 use App\Services\AuditService;
 use App\Services\MailDispatcher;
@@ -61,7 +64,7 @@ class UserController extends Controller
             'email' => $request->input('email'),
             'password' => $request->input('password'),
             'entity_id' => $request->input('entity_id'),
-            'entity_scope_mode' => $request->input('entity_scope_mode', \App\Enums\EntityScopeMode::Include->value),
+            'entity_scope_mode' => $request->input('entity_scope_mode', EntityScopeMode::Include->value),
             'is_active' => $request->boolean('is_active', true),
         ]);
         $user->syncRoles($request->input('roles', []));
@@ -92,7 +95,7 @@ class UserController extends Controller
 
         return view('admin.users.show', [
             'user' => $user,
-            'lastLogins' => \App\Models\LoginAttempt::query()
+            'lastLogins' => LoginAttempt::query()
                 ->where('user_id', $user->id)
                 ->latest('created_at')
                 ->limit(10)
@@ -119,7 +122,7 @@ class UserController extends Controller
                 'body_type' => $mandat->body->type,
                 'role' => $mandat->role,
                 'is_chair' => (bool) $mandat->is_chair,
-                'context' => \App\Enums\AssignmentContext::fromBodyType($mandat->body->type)->value,
+                'context' => AssignmentContext::fromBodyType($mandat->body->type)->value,
                 'already' => in_array($mandat->body->company_entity_id, $bereitsZugeordnet, true),
             ])
             ->unique(fn ($m) => $m['entity_id'].'|'.$m['context'])
@@ -130,7 +133,7 @@ class UserController extends Controller
             'roles' => Role::query()->orderBy('name')->get(),
             'entities' => Entity::query()->orderBy('display_name')->get(['id', 'display_name']),
             'mandate' => $mandate,
-            'contexts' => \App\Enums\AssignmentContext::cases(),
+            'contexts' => AssignmentContext::cases(),
         ]);
     }
 
@@ -151,7 +154,7 @@ class UserController extends Controller
             'entity_id' => $request->input('entity_id'),
             // Sichtbarkeitsmodus: ohne Angabe bleibt es beim Einschluss,
             // also beim engeren der beiden Modi.
-            'entity_scope_mode' => $request->input('entity_scope_mode', \App\Enums\EntityScopeMode::Include->value),
+            'entity_scope_mode' => $request->input('entity_scope_mode', EntityScopeMode::Include->value),
             'is_active' => $request->boolean('is_active'),
         ]);
         if ($request->filled('password')) {

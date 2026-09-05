@@ -4,6 +4,7 @@ namespace Tests\Feature\Holding;
 
 use App\Enums\ShareTransactionStatus;
 use App\Models\ShareTransaction;
+use App\Services\Holding\ShareholdingService;
 
 /**
  * Aktienbewegungen über die Oberfläche: Register, Erfassung mit
@@ -51,7 +52,7 @@ class ShareTransactionHttpTest extends HoldingTestCase
         $this->assertSame('12.5000', $transaction->price_per_share);
 
         // Entwurf verändert den Bestand nicht
-        $service = app(\App\Services\Holding\ShareholdingService::class);
+        $service = app(ShareholdingService::class);
         $this->assertSame(100000, $service->sharesOf($timo, now()->addDay()));
     }
 
@@ -140,7 +141,7 @@ class ShareTransactionHttpTest extends HoldingTestCase
         $reversal = ShareTransaction::query()->where('reversal_of', $transaction->id)->firstOrFail();
         $this->assertSame('correction', $reversal->type->value);
 
-        $service = app(\App\Services\Holding\ShareholdingService::class);
+        $service = app(ShareholdingService::class);
         $this->assertSame(100000, $service->sharesOf($timo));
     }
 }

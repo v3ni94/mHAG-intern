@@ -20,9 +20,7 @@ use Illuminate\Support\Carbon;
  */
 class ShareholderController extends Controller
 {
-    public function __construct(private readonly ShareholdingService $shareholding)
-    {
-    }
+    public function __construct(private readonly ShareholdingService $shareholding) {}
 
     public function index(Request $request)
     {
@@ -38,6 +36,7 @@ class ShareholderController extends Controller
 
         // Alle Aktionäre anzeigen, auch mit Bestand 0 (z. B. nach Vollverkauf).
         $rows = Shareholder::query()
+            ->visibleTo($request->user())
             ->with('entity')
             ->orderBy('shareholder_number')
             ->get()
@@ -54,6 +53,7 @@ class ShareholderController extends Controller
             ->values();
 
         $snapshots = ShareholderListSnapshot::query()
+            ->visibleTo($request->user())
             ->with('creator')
             ->orderByDesc('created_at')
             ->limit(20)
@@ -61,6 +61,7 @@ class ShareholderController extends Controller
 
         // Entities ohne Aktionärsdatensatz für das Anlegen-Formular
         $availableEntities = Entity::query()
+            ->visibleTo($request->user())
             ->whereDoesntHave('shareholder')
             ->where('status', 'active')
             ->orderBy('display_name')
@@ -94,6 +95,12 @@ class ShareholderController extends Controller
 
     public function show(Request $request, Shareholder $shareholder)
     {
+        // Sichtbarkeit auch beim direkten Aufruf ueber die Adresszeile.
+        abort_unless(
+            Shareholder::query()->visibleTo($request->user())->whereKey($shareholder->getKey())->exists(),
+            404,
+        );
+
         $request->validate(
             ['as_of' => ['nullable', 'date']],
             ['as_of.date' => 'Der Stichtag muss ein gültiges Datum sein.'],
@@ -112,6 +119,7 @@ class ShareholderController extends Controller
         $shares = $this->shareholding->sharesOf($shareholder, $asOf);
 
         $transactions = ShareTransaction::query()
+            ->visibleTo($request->user())
             ->with(['buyer.entity', 'seller.entity'])
             ->where(function ($q) use ($shareholder) {
                 $q->where('buyer_shareholder_id', $shareholder->id)

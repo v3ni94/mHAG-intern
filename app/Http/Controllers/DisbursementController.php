@@ -20,9 +20,7 @@ use Illuminate\Support\Carbon;
  */
 class DisbursementController extends Controller
 {
-    public function __construct(private readonly DisbursementService $disbursements)
-    {
-    }
+    public function __construct(private readonly DisbursementService $disbursements) {}
 
     private function currentUser(Request $request): User
     {

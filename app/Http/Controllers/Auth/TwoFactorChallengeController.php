@@ -11,11 +11,12 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
 use PragmaRX\Google2FA\Google2FA;
 
 class TwoFactorChallengeController extends Controller
 {
-    public function show(Request $request): \Illuminate\View\View|RedirectResponse
+    public function show(Request $request): View|RedirectResponse
     {
         if (! $request->session()->has('two_factor:user_id')) {
             return redirect()->route('login');

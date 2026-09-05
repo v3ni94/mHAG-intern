@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ChangelogEntry;
 use App\Models\FaqEntry;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\View\View;
@@ -333,7 +334,7 @@ class HelpController extends Controller
      * FAQ-Sichtbarkeit (Abschnitt 114): all immer; internal für interne Rollen;
      * admin nur Administrator; supervisory_board/lender/borrower je Rolle.
      */
-    private function visibleFaq(User $user): \Illuminate\Database\Eloquent\Builder
+    private function visibleFaq(User $user): Builder
     {
         $visibilities = ['all'];
         if ($user->isInternal()) {

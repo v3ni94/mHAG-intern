@@ -18,7 +18,9 @@ use App\Models\Security;
 use App\Models\Setting;
 use App\Models\User;
 use App\Models\UserInvitation;
+use App\Services\Loans\LoanBalanceService;
 use App\Support\Money;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
@@ -30,9 +32,8 @@ use Illuminate\Support\Facades\Route;
 class DashboardService
 {
     public function __construct(
-        private readonly \App\Services\Loans\LoanBalanceService $balanceService,
-    ) {
-    }
+        private readonly LoanBalanceService $balanceService,
+    ) {}
 
     /**
      * "Heute relevant" (Abschnitt 74): Liste aus severity, icon (Emoji),
@@ -78,7 +79,7 @@ class DashboardService
 
         // Beschlüsse warten auf Unterschrift (nur mit Berechtigung)
         if ($user->can('resolutions.view')) {
-            $forSignature = Resolution::query()->where('status', ResolutionStatus::ForSignature->value)->count();
+            $forSignature = Resolution::query()->visibleTo($user)->where('status', ResolutionStatus::ForSignature->value)->count();
             if ($forSignature > 0) {
                 $items[] = $this->entry('warning', sprintf('%d %s auf Unterschrift', $forSignature, $forSignature === 1 ? 'Beschluss wartet' : 'Beschlüsse warten'), $this->url('resolutions.index'));
             }
@@ -158,7 +159,7 @@ class DashboardService
             }
         }
 
-        $planned = fn (RepaymentItemType $type, \Carbon\CarbonInterface $from, \Carbon\CarbonInterface $to) => (string) RepaymentPlanItem::query()
+        $planned = fn (RepaymentItemType $type, CarbonInterface $from, CarbonInterface $to) => (string) RepaymentPlanItem::query()
             ->whereIn('loan_id', $loanIds)
             ->where('item_type', $type->value)
             ->whereDate('due_date', '>=', $from)

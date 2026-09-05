@@ -6,6 +6,7 @@ use App\Enums\BookingType;
 use App\Enums\RepaymentItemStatus;
 use App\Enums\RepaymentItemType;
 use App\Models\Loan;
+use App\Models\LoanTransaction;
 use App\Models\RepaymentPlanItem;
 use App\Support\Money;
 use Carbon\CarbonInterface;
@@ -200,7 +201,7 @@ class LoanBalanceService
      * ausweicht (eiserne Regel 1: nie float bei Geld).
      *
      * @param  array<int, int>  $loanIds
-     * @return array<int, string>  Kontostand je Darlehens-ID
+     * @return array<int, string> Kontostand je Darlehens-ID
      */
     public function accountBalancesFor(array $loanIds, ?CarbonInterface $asOf = null): array
     {
@@ -211,7 +212,7 @@ class LoanBalanceService
         $asOfStr = ($asOf ? Carbon::parse($asOf->toDateString()) : today())->toDateString();
 
         $balances = array_fill_keys($loanIds, '0.00');
-        $rows = \App\Models\LoanTransaction::query()
+        $rows = LoanTransaction::query()
             ->whereIn('loan_id', $loanIds)
             ->whereDate('effective_date', '<=', $asOfStr)
             ->get(['loan_id', 'amount']);

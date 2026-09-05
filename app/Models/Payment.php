@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\PaymentOrigin;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -17,7 +18,7 @@ class Payment extends Model
             'payment_date' => 'date',
             'value_date' => 'date',
             'amount' => 'decimal:2',
-            'origin' => \App\Enums\PaymentOrigin::class,
+            'origin' => PaymentOrigin::class,
             'cancelled_at' => 'datetime',
         ];
     }

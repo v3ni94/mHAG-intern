@@ -16,6 +16,7 @@ use App\Services\AuditService;
 use App\Services\NumberSequenceService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -123,7 +124,7 @@ class CompanyController extends Controller
         }
 
         $entity->load('company');
-        $data = $this->loadTabData($entity, $tab);
+        $data = $this->loadTabData($entity, $tab, $request);
 
         return view('companies.show', array_merge($data, [
             'entity' => $entity,
@@ -200,7 +201,7 @@ class CompanyController extends Controller
         abort_unless($user->isInternal() || $user->accessibleEntityIds()->contains($entity->id), 404);
     }
 
-    private function loadTabData(Entity $entity, string $tab): array
+    private function loadTabData(Entity $entity, string $tab, Request $request): array
     {
         $data = [];
 
@@ -274,9 +275,17 @@ class CompanyController extends Controller
                     ->get();
                 break;
             case 'beschluesse':
+                // Klammerung beachten: ohne die innere Gruppierung wuerde die
+                // Sichtbarkeitspruefung nur fuer den zweiten Zweig gelten.
+                // Ueber den Antragsteller kann hier ein Beschluss EINER
+                // ANDEREN Gesellschaft auftauchen, deshalb ist die Pruefung
+                // hier noetig.
                 $data['resolutions'] = Resolution::query()
-                    ->where('company_entity_id', $entity->id)
-                    ->orWhere('applicant_entity_id', $entity->id)
+                    ->visibleTo($request->user())
+                    ->where(function ($q) use ($entity) {
+                        $q->where('company_entity_id', $entity->id)
+                            ->orWhere('applicant_entity_id', $entity->id);
+                    })
                     ->with('company')
                     ->latest('id')
                     ->limit(100)
@@ -307,7 +316,7 @@ class CompanyController extends Controller
         return $data;
     }
 
-    private function personOptions(): \Illuminate\Support\Collection
+    private function personOptions(): Collection
     {
         return Entity::query()
             ->where('type', EntityType::Person)

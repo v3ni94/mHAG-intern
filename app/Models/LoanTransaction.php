@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\BookingType;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -15,7 +16,7 @@ class LoanTransaction extends Model
     protected function casts(): array
     {
         return [
-            'booking_type' => \App\Enums\BookingType::class,
+            'booking_type' => BookingType::class,
             'booking_date' => 'date',
             'effective_date' => 'date',
             'amount' => 'decimal:2',

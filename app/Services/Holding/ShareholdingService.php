@@ -34,8 +34,7 @@ class ShareholdingService
 {
     public function __construct(
         private readonly DocumentStorageInterface $storage,
-    ) {
-    }
+    ) {}
 
     /** Gesamtzahl der Aktien laut Grundkapitalstruktur (Abschnitt 76). */
     public function totalShares(): int

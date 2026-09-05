@@ -19,7 +19,7 @@ class InvestmentController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Investment::query()->with('company.company');
+        $query = Investment::query()->visibleTo($request->user())->with('company.company');
 
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
@@ -53,8 +53,13 @@ class InvestmentController extends Controller
             ->with('success', 'Beteiligung wurde angelegt.');
     }
 
-    public function show(Investment $investment)
+    public function show(Request $request, Investment $investment)
     {
+        abort_unless(
+            Investment::query()->visibleTo($request->user())->whereKey($investment->getKey())->exists(),
+            404,
+        );
+
         $investment->load(['company.company', 'company.addresses', 'documentLinks.document']);
 
         // Geschäftsführung/Vorstand der Beteiligung aus den Organstellungen

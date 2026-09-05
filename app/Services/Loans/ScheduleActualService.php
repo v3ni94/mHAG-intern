@@ -10,6 +10,7 @@ use App\Models\PaymentAllocation;
 use App\Models\RepaymentPlanItem;
 use App\Models\User;
 use App\Support\Money;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -131,7 +132,7 @@ class ScheduleActualService
         return Money::negate($net);
     }
 
-    /** @return \Illuminate\Support\Collection<int, LoanTransaction> */
+    /** @return Collection<int, LoanTransaction> */
     protected function ownTransactions(RepaymentPlanItem $item)
     {
         return LoanTransaction::query()

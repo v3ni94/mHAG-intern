@@ -12,10 +12,11 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
 
 class LoginController extends Controller
 {
-    public function show(): \Illuminate\View\View|RedirectResponse
+    public function show(): View|RedirectResponse
     {
         if (Auth::check()) {
             return redirect()->route('dashboard');

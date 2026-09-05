@@ -17,9 +17,7 @@ use Illuminate\Support\Carbon;
  */
 class LoanFeeController extends Controller
 {
-    public function __construct(private readonly LoanRecalculationService $recalculation)
-    {
-    }
+    public function __construct(private readonly LoanRecalculationService $recalculation) {}
 
     private function currentUser(Request $request): User
     {

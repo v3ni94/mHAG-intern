@@ -8,10 +8,11 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\Rules\Password as PasswordRule;
+use Illuminate\View\View;
 
 class PasswordResetController extends Controller
 {
-    public function requestForm(): \Illuminate\View\View
+    public function requestForm(): View
     {
         return view('auth.forgot-password');
     }
@@ -26,7 +27,7 @@ class PasswordResetController extends Controller
         return back()->with('success', 'Sofern ein Konto mit dieser E-Mail-Adresse existiert, wurde ein Link zum Zurücksetzen versendet.');
     }
 
-    public function resetForm(Request $request, string $token): \Illuminate\View\View
+    public function resetForm(Request $request, string $token): View
     {
         return view('auth.reset-password', ['token' => $token, 'email' => $request->query('email')]);
     }

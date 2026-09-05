@@ -3,11 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Enums\InterestDueDayMode;
+use App\Enums\InterestFrequency;
+use App\Enums\InterestMethod;
 use App\Enums\LoanStatus;
+use App\Enums\PaymentOrigin;
+use App\Enums\RepaymentItemType;
+use App\Enums\RepaymentModel;
+use App\Http\Requests\Loans\RecordLoanDefaultRequest;
 use App\Http\Requests\Loans\StoreLoanRequest;
 use App\Http\Requests\Loans\TransitionLoanRequest;
 use App\Http\Requests\Loans\UpdateLoanRequest;
 use App\Models\AuditLog;
+use App\Models\BankAccount;
+use App\Models\Document;
 use App\Models\Entity;
 use App\Models\Loan;
 use App\Models\LoanType;
@@ -16,13 +24,16 @@ use App\Services\AuditService;
 use App\Services\Loans\DefaultInterestService;
 use App\Services\Loans\DisbursementService;
 use App\Services\Loans\LoanBalanceService;
+use App\Services\Loans\LoanDefaultService;
 use App\Services\Loans\LoanRecalculationService;
 use App\Services\Loans\LoanScheduleService;
+use App\Services\Loans\LoanYieldService;
 use App\Services\NumberSequenceService;
 use App\Support\Money;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -150,9 +161,9 @@ class LoanController extends Controller
         return view('loans.create', [
             'loan' => new Loan([
                 'currency' => 'EUR',
-                'interest_method' => \App\Enums\InterestMethod::Act365,
-                'interest_frequency' => \App\Enums\InterestFrequency::Monthly,
-                'repayment_model' => \App\Enums\RepaymentModel::Bullet,
+                'interest_method' => InterestMethod::Act365,
+                'interest_frequency' => InterestFrequency::Monthly,
+                'repayment_model' => RepaymentModel::Bullet,
             ]),
             'entities' => Entity::visibleTo($user)->orderBy('display_name')->get(['id', 'display_name']),
             'loanTypes' => LoanType::where('is_active', true)->orderBy('name')->get(),
@@ -288,7 +299,7 @@ class LoanController extends Controller
                 'planned_amount' => Money::normalize($row['amount']),
                 'planned_date' => Carbon::parse($row['date'])->toDateString(),
                 'confirmed' => ($row['status'] ?? 'planned') === 'confirmed',
-                'origin' => $row['origin'] ?? \App\Enums\PaymentOrigin::ManualEntered->value,
+                'origin' => $row['origin'] ?? PaymentOrigin::ManualEntered->value,
                 'reference' => $row['reference'] ?? null,
             ];
         }
@@ -356,7 +367,7 @@ class LoanController extends Controller
             ],
             // Ertrag und Rendite (Anforderung 30.08.2026): jede Kennzahl mit
             // ihren Bestandteilen, damit der Rechenweg angezeigt werden kann.
-            'ertrag' => ['yield' => app(\App\Services\Loans\LoanYieldService::class)->analyse($model)],
+            'ertrag' => ['yield' => app(LoanYieldService::class)->analyse($model)],
             'dokumente' => ['statementDocuments' => $this->statementDocuments($model)],
             'auszahlungen' => [
                 // Bankkonten beider Seiten (Abschnitt 31): Geber- und Nehmerkonten
@@ -366,8 +377,8 @@ class LoanController extends Controller
                 'visibleEntityIds' => $user->accessibleEntityIds()->all(),
             ],
             'konto' => ['accountRows' => $this->accountRows($model)],
-            'soll-ist' => ['interestItems' => $model->repaymentPlanItems->where('item_type', \App\Enums\RepaymentItemType::Interest)],
-            'zinsen' => ['interestItems' => $model->repaymentPlanItems->where('item_type', \App\Enums\RepaymentItemType::Interest)],
+            'soll-ist' => ['interestItems' => $model->repaymentPlanItems->where('item_type', RepaymentItemType::Interest)],
+            'zinsen' => ['interestItems' => $model->repaymentPlanItems->where('item_type', RepaymentItemType::Interest)],
             'sicherheiten' => ['entities' => Entity::visibleTo($user)->orderBy('display_name')->get(['id', 'display_name'])],
             'chronik' => ['auditLogs' => AuditLog::with('user')
                 ->where('auditable_type', $model->getMorphClass())
@@ -506,9 +517,9 @@ class LoanController extends Controller
      * keine rechtliche Bewertung und keine Einstufung als uneinbringlich statt.
      */
     public function recordDefault(
-        \App\Http\Requests\Loans\RecordLoanDefaultRequest $request,
+        RecordLoanDefaultRequest $request,
         int $loan,
-        \App\Services\Loans\LoanDefaultService $defaultService,
+        LoanDefaultService $defaultService,
     ): RedirectResponse {
         $user = $this->currentUser($request);
         $model = $this->loanFor($user, $loan);
@@ -543,7 +554,7 @@ class LoanController extends Controller
     public function revokeDefault(
         Request $request,
         int $loan,
-        \App\Services\Loans\LoanDefaultService $defaultService,
+        LoanDefaultService $defaultService,
     ): RedirectResponse {
         $user = $this->currentUser($request);
         $model = $this->loanFor($user, $loan);
@@ -685,9 +696,9 @@ class LoanController extends Controller
      * Aktive Bankkonten einer Partei. Externe Benutzer sehen ausschließlich
      * Konten ihrer eigenen Entities (IBAN ist ein personenbezogenes Datum).
      *
-     * @return \Illuminate\Support\Collection<int, \App\Models\BankAccount>
+     * @return Collection<int, BankAccount>
      */
-    private function accountsOf(?int $entityId, User $user): \Illuminate\Support\Collection
+    private function accountsOf(?int $entityId, User $user): Collection
     {
         if (! $entityId) {
             return collect();
@@ -696,7 +707,7 @@ class LoanController extends Controller
             return collect();
         }
 
-        return \App\Models\BankAccount::query()
+        return BankAccount::query()
             ->where('entity_id', $entityId)
             ->where('is_active', true)
             ->orderBy('bank_name')
@@ -708,11 +719,11 @@ class LoanController extends Controller
      * Frühere Forderungsaufstellungen (Abschnitt 39): unveränderliche
      * Snapshots aus dem Dokumentenmodul, neueste zuerst.
      *
-     * @return \Illuminate\Support\Collection<int, \App\Models\Document>
+     * @return Collection<int, Document>
      */
-    private function statementDocuments(Loan $loan): \Illuminate\Support\Collection
+    private function statementDocuments(Loan $loan): Collection
     {
-        return \App\Models\Document::query()
+        return Document::query()
             ->where('category', LoanStatementController::SNAPSHOT_CATEGORY)
             ->whereHas('links', fn ($q) => $q
                 ->where('linkable_type', $loan->getMorphClass())

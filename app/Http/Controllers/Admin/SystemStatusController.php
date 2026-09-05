@@ -18,9 +18,7 @@ use Illuminate\View\View;
  */
 class SystemStatusController extends Controller
 {
-    public function __construct(private readonly BackupService $backups)
-    {
-    }
+    public function __construct(private readonly BackupService $backups) {}
 
     public function index(Request $request): View
     {

@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\AuditService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 /**
@@ -60,7 +61,7 @@ class ReminderController extends Controller
      * die Namen aller Benutzer der Gruppe auslesen. Sie weist nur sich selbst
      * zu, mehr ist für den Zweck nicht erforderlich.
      */
-    private function zuweisbareBenutzer(?User $user): \Illuminate\Support\Collection
+    private function zuweisbareBenutzer(?User $user): Collection
     {
         if ($user === null) {
             return collect();

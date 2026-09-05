@@ -8,8 +8,8 @@ use App\Mail\SmtpTestMail;
 use App\Models\Setting;
 use App\Services\AuditService;
 use App\Services\MailDispatcher;
-use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Spatie\Permission\Models\Role;
 

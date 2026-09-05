@@ -10,6 +10,7 @@ use App\Models\Entity;
 use App\Models\ResolutionParticipant;
 use App\Services\AuditService;
 use App\Services\NumberSequenceService;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -274,7 +275,7 @@ class PersonController extends Controller
         return $data;
     }
 
-    private function auditLogsFor(Entity $entity): \Illuminate\Contracts\Pagination\LengthAwarePaginator
+    private function auditLogsFor(Entity $entity): LengthAwarePaginator
     {
         return AuditLog::query()
             ->with('user')

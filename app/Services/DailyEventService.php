@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\DailyFact;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * Tagesereignisse für die Fußzeile (Abschnitt 119, erweitert am 30.08.2026).
@@ -29,7 +30,7 @@ class DailyEventService
     /**
      * Ereignis des Tages und die Anzahl weiterer Einträge für denselben Tag.
      *
-     * @return array{event: ?DailyFact, others: \Illuminate\Support\Collection<int, DailyFact>}
+     * @return array{event: ?DailyFact, others: Collection<int, DailyFact>}
      */
     public function forDate(?CarbonInterface $date = null): array
     {

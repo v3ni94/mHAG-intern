@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rules\Password as PasswordRule;
+use Illuminate\View\View;
 
 /**
  * Annahme einer Benutzereinladung (Abschnitt 12): Link ist zufällig,
@@ -18,7 +19,7 @@ use Illuminate\Validation\Rules\Password as PasswordRule;
  */
 class InvitationController extends Controller
 {
-    public function show(string $token): \Illuminate\View\View
+    public function show(string $token): View
     {
         $invitation = $this->findUsable($token);
 

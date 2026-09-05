@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\SecurityType;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -13,7 +14,7 @@ class Security extends Model
     protected function casts(): array
     {
         return [
-            'type' => \App\Enums\SecurityType::class,
+            'type' => SecurityType::class,
             'nominal_value' => 'decimal:2',
             'internal_value' => 'decimal:2',
             'valid_from' => 'date',

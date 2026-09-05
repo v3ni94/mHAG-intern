@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ResolutionParticipant extends Model
 {
@@ -28,7 +29,7 @@ class ResolutionParticipant extends Model
         return $this->belongsTo(Entity::class);
     }
 
-    public function vote(): \Illuminate\Database\Eloquent\Relations\HasOne
+    public function vote(): HasOne
     {
         return $this->hasOne(ResolutionVote::class, 'resolution_participant_id');
     }

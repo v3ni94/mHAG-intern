@@ -11,14 +11,20 @@ use App\Models\Loan;
 use App\Models\RepaymentPlanItem;
 use App\Models\Resolution;
 use App\Models\Security;
+use App\Models\Shareholder;
 use App\Models\ShareTransaction;
 use App\Models\User;
+use App\Services\Holding\ShareholdingService;
+use App\Services\Loans\LoanBalanceService;
+use App\Services\Loans\LoanYieldService;
 use App\Support\Money;
 use App\Support\SimpleXlsxWriter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
+use Illuminate\View\View;
 
 /**
  * Reports mit Export (Abschnitte 107 und 108 Masterprompt).
@@ -45,12 +51,11 @@ class ReportController extends Controller
     ];
 
     public function __construct(
-        private readonly \App\Services\Loans\LoanBalanceService $balanceService,
-        private readonly \App\Services\Loans\LoanYieldService $yieldService,
-    ) {
-    }
+        private readonly LoanBalanceService $balanceService,
+        private readonly LoanYieldService $yieldService,
+    ) {}
 
-    public function index(Request $request): \Illuminate\View\View
+    public function index(Request $request): View
     {
         $user = $request->user();
         $reports = collect(self::REPORTS)
@@ -102,11 +107,11 @@ class ReportController extends Controller
             'sicherheiten' => $this->securities($request, $user),
             'darlehen-je-kreditgeber' => $this->loansByParty($request, $user, 'lender'),
             'darlehen-je-kreditnehmer' => $this->loansByParty($request, $user, 'borrower'),
-            'aktionaersliste' => $this->shareholderList($request),
-            'aktienbewegungen' => $this->shareTransactions($request),
-            'beteiligungen' => $this->investments($request),
-            'beschlussregister' => $this->resolutionRegister($request),
-            'organhistorie' => $this->bodyHistory($request),
+            'aktionaersliste' => $this->shareholderList($request, $user),
+            'aktienbewegungen' => $this->shareTransactions($request, $user),
+            'beteiligungen' => $this->investments($request, $user),
+            'beschlussregister' => $this->resolutionRegister($request, $user),
+            'organhistorie' => $this->bodyHistory($request, $user),
         };
     }
 
@@ -460,16 +465,23 @@ class ReportController extends Controller
     // Holding
     // ------------------------------------------------------------------
 
-    private function shareholderList(Request $request): array
+    private function shareholderList(Request $request, User $user): array
     {
         $asOf = $this->date($request->query('stichtag')) ?? today();
 
-        /** @var \App\Services\Holding\ShareholdingService $shareholding */
-        $shareholding = app(\App\Services\Holding\ShareholdingService::class);
+        /** @var ShareholdingService $shareholding */
+        $shareholding = app(ShareholdingService::class);
         $holdings = $shareholding->holdingsAsOf($asOf);
 
+        // Prozentwerte beziehen sich weiter auf das gesamte Grundkapital,
+        // ausgewiesen werden aber nur die sichtbaren Aktionaere.
+        $sichtbare = Shareholder::query()->visibleTo($user)->pluck('id')->all();
+        $holdings = collect($holdings)
+            ->filter(fn (array $entry) => in_array($entry['shareholder']->id, $sichtbare, true))
+            ->values();
+
         $rows = collect($holdings)->map(function (array $entry) {
-            /** @var \App\Models\Shareholder $shareholder */
+            /** @var Shareholder $shareholder */
             $shareholder = $entry['shareholder'];
 
             return [
@@ -488,13 +500,14 @@ class ReportController extends Controller
         ];
     }
 
-    private function shareTransactions(Request $request): array
+    private function shareTransactions(Request $request, User $user): array
     {
         $from = $this->date($request->query('von'));
         $to = $this->date($request->query('bis'));
         $status = $request->query('status');
 
         $transactions = ShareTransaction::query()
+            ->visibleTo($user)
             ->with(['seller.entity:id,display_name', 'buyer.entity:id,display_name'])
             ->when($from, fn ($q) => $q->whereDate('economic_transfer_date', '>=', $from))
             ->when($to, fn ($q) => $q->whereDate('economic_transfer_date', '<=', $to))
@@ -521,11 +534,12 @@ class ReportController extends Controller
         ];
     }
 
-    private function investments(Request $request): array
+    private function investments(Request $request, User $user): array
     {
         $status = $request->query('status');
 
         $investments = Investment::query()
+            ->visibleTo($user)
             ->with('company:id,display_name')
             ->when($status, fn ($q) => $q->where('status', $status))
             ->orderBy('company_entity_id')
@@ -549,13 +563,14 @@ class ReportController extends Controller
         ];
     }
 
-    private function resolutionRegister(Request $request): array
+    private function resolutionRegister(Request $request, User $user): array
     {
         $year = $request->query('jahr');
         $type = $request->query('typ');
         $status = $request->query('status');
 
         $resolutions = Resolution::query()
+            ->visibleTo($user)
             ->with('company:id,display_name')
             ->when($year, fn ($q) => $q->whereYear('resolved_on', $year))
             ->when($type, fn ($q) => $q->where('type', $type))
@@ -582,12 +597,14 @@ class ReportController extends Controller
         ];
     }
 
-    private function bodyHistory(Request $request): array
+    private function bodyHistory(Request $request, User $user): array
     {
         $bodyType = $request->query('gremium');
         $onlyActive = $request->boolean('nur_aktive');
 
         $members = CorporateBodyMember::query()
+            // Ueber das Gremium an die Gesellschaft gebunden.
+            ->whereHas('body', fn ($q) => $q->visibleTo($user))
             ->with(['body:id,name,type', 'person:id,display_name'])
             ->when($bodyType, fn ($q) => $q->whereHas('body', fn ($sub) => $sub->where('type', $bodyType)))
             ->when($onlyActive, fn ($q) => $q->where('status', 'active'))
@@ -639,7 +656,7 @@ class ReportController extends Controller
     }
 
     /** CSV: Semikolon-getrennt, UTF-8 mit BOM, deutsche Header. */
-    private function csv(string $filename, array $columns, array $rows): \Illuminate\Http\Response
+    private function csv(string $filename, array $columns, array $rows): Response
     {
         $handle = fopen('php://temp', 'r+');
         fwrite($handle, "\xEF\xBB\xBF");

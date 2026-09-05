@@ -21,13 +21,11 @@ use Illuminate\Http\Request;
  */
 class ShareTransactionController extends Controller
 {
-    public function __construct(private readonly ShareholdingService $shareholding)
-    {
-    }
+    public function __construct(private readonly ShareholdingService $shareholding) {}
 
     public function index(Request $request)
     {
-        $query = ShareTransaction::query()->with(['buyer.entity', 'seller.entity']);
+        $query = ShareTransaction::query()->visibleTo($request->user())->with(['buyer.entity', 'seller.entity']);
 
         if ($request->filled('type')) {
             $query->where('type', $request->input('type'));
@@ -51,6 +49,7 @@ class ShareTransactionController extends Controller
             ? "strftime('%Y', economic_transfer_date)"
             : 'YEAR(economic_transfer_date)';
         $years = ShareTransaction::query()
+            ->visibleTo($request->user())
             ->selectRaw($yearExpression.' as y')
             ->distinct()
             ->pluck('y')
@@ -67,12 +66,12 @@ class ShareTransactionController extends Controller
         ]);
     }
 
-    public function create()
+    public function create(Request $request)
     {
         return view('share-transactions.create', [
             'types' => ShareTransactionType::cases(),
-            'shareholders' => Shareholder::query()->with('entity')->orderBy('shareholder_number')->get(),
-            'resolutions' => Resolution::query()->orderByDesc('created_at')->limit(100)->get(['id', 'resolution_number', 'title']),
+            'shareholders' => Shareholder::query()->visibleTo($request->user())->with('entity')->orderBy('shareholder_number')->get(),
+            'resolutions' => Resolution::query()->visibleTo($request->user())->orderByDesc('created_at')->limit(100)->get(['id', 'resolution_number', 'title']),
             'contracts' => Contract::query()->orderByDesc('created_at')->limit(100)->get(['id', 'contract_number', 'title']),
         ]);
     }
@@ -102,8 +101,13 @@ class ShareTransactionController extends Controller
             ->with('success', sprintf('Aktienbewegung %s wurde als Entwurf erfasst.', $transaction->transaction_number));
     }
 
-    public function show(ShareTransaction $shareTransaction)
+    public function show(Request $request, ShareTransaction $shareTransaction)
     {
+        abort_unless(
+            ShareTransaction::query()->visibleTo($request->user())->whereKey($shareTransaction->getKey())->exists(),
+            404,
+        );
+
         $shareTransaction->load([
             'buyer.entity',
             'seller.entity',
@@ -114,6 +118,7 @@ class ShareTransactionController extends Controller
         ]);
 
         $reversals = ShareTransaction::query()
+            ->visibleTo($request->user())
             ->where('reversal_of', $shareTransaction->id)
             ->get();
 

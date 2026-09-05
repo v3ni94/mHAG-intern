@@ -2,6 +2,13 @@
 
 namespace App\Models;
 
+use App\Enums\InterestDueDayMode;
+use App\Enums\InterestFrequency;
+use App\Enums\InterestMethod;
+use App\Enums\LoanStatus;
+use App\Enums\RepaymentModel;
+use App\Enums\RiskRating;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -29,11 +36,11 @@ class Loan extends Model
             'default_interest_enabled' => 'boolean',
             // Verzugszinsen (Abschnitt 44): fachliche Vorgaben, keine Vorbelegung
             'default_interest_start' => 'date',
-            'default_interest_method' => \App\Enums\InterestMethod::class,
-            'interest_method' => \App\Enums\InterestMethod::class,
-            'interest_frequency' => \App\Enums\InterestFrequency::class,
+            'default_interest_method' => InterestMethod::class,
+            'interest_method' => InterestMethod::class,
+            'interest_frequency' => InterestFrequency::class,
             // Fälligkeitstag der Zinsperioden; Standard = bisheriges Verhalten
-            'interest_due_day_mode' => \App\Enums\InterestDueDayMode::class,
+            'interest_due_day_mode' => InterestDueDayMode::class,
             'interest_due_day' => 'integer',
             'interest_due_month' => 'integer',
             // Zinskapitalisierung: Zuschreibung auf den valutierten Betrag
@@ -41,9 +48,9 @@ class Loan extends Model
             'interest_capitalization_from' => 'date',
             // Ausfall (nicht Verzug): Wirkungsdatum der Erfassung
             'defaulted_on' => 'date',
-            'repayment_model' => \App\Enums\RepaymentModel::class,
-            'status' => \App\Enums\LoanStatus::class,
-            'risk_rating' => \App\Enums\RiskRating::class,
+            'repayment_model' => RepaymentModel::class,
+            'status' => LoanStatus::class,
+            'risk_rating' => RiskRating::class,
             'tags' => 'array',
         ];
     }
@@ -189,7 +196,7 @@ class Loan extends Model
     }
 
     /** Statuswechsel immer hierüber, damit die Historie vollständig bleibt. */
-    public function transitionStatus(\App\Enums\LoanStatus $to, ?User $by = null, ?string $note = null, ?\Carbon\Carbon $effectiveDate = null): void
+    public function transitionStatus(LoanStatus $to, ?User $by = null, ?string $note = null, ?Carbon $effectiveDate = null): void
     {
         $from = $this->status;
         if ($from === $to) {

@@ -8,6 +8,7 @@ use App\Http\Requests\Holding\AttachSignedDocumentRequest;
 use App\Http\Requests\Holding\MarkSignatureParticipantRequest;
 use App\Http\Requests\Holding\StoreSignatureRequestRequest;
 use App\Models\Contract;
+use App\Models\Document;
 use App\Models\Entity;
 use App\Models\Resolution;
 use App\Models\ShareholderListSnapshot;
@@ -47,19 +48,34 @@ class SignatureRequestController extends Controller
         SignatureRequestStatus::InProgress,
     ];
 
-    public function __construct(private readonly SignatureServiceInterface $signatures)
+    public function __construct(private readonly SignatureServiceInterface $signatures) {}
+
+    /**
+     * Sichtbarkeit beim direkten Aufruf. Eine Signaturanfrage ist so sichtbar
+     * wie der Vorgang, zu dem sie gehoert.
+     */
+    private function pruefeSichtbarkeit(SignatureRequest $signatureRequest): void
     {
+        $user = auth()->user();
+
+        abort_unless(
+            $user !== null
+                && SignatureRequest::query()->visibleTo($user)->whereKey($signatureRequest->getKey())->exists(),
+            404,
+        );
     }
 
     public function index(Request $request)
     {
         $open = SignatureRequest::query()
+            ->visibleTo($request->user())
             ->with(['participants.entity', 'subject', 'document'])
             ->whereIn('status', array_map(fn ($s) => $s->value, self::OPEN_STATUSES))
             ->orderByDesc('created_at')
             ->get();
 
         $closed = SignatureRequest::query()
+            ->visibleTo($request->user())
             ->with(['participants.entity', 'subject', 'document'])
             ->whereNotIn('status', array_map(fn ($s) => $s->value, self::OPEN_STATUSES))
             ->orderByDesc('updated_at')
@@ -82,7 +98,9 @@ class SignatureRequestController extends Controller
 
         if ($subjectKey && isset(self::SUBJECT_TYPES[$subjectKey]) && $request->filled('subject_id')) {
             [$class] = self::SUBJECT_TYPES[$subjectKey];
-            $subject = $class::query()->find($request->input('subject_id'));
+            // Nur sichtbare Vorgaenge: sonst liess sich ueber die Adresszeile
+            // Bezeichnung und Inhalt eines fremden Vorgangs abrufen.
+            $subject = $class::query()->visibleTo($request->user())->find($request->input('subject_id'));
             if ($subject) {
                 $document = $this->subjectDocument($subject);
                 $prefill = $this->prefillParticipants($subject);
@@ -96,14 +114,14 @@ class SignatureRequestController extends Controller
             'document' => $document,
             'prefill' => $prefill,
             'roles' => self::SIGNER_ROLES,
-            'entities' => Entity::query()->where('status', 'active')->orderBy('display_name')->get(['id', 'display_name']),
+            'entities' => Entity::query()->visibleTo($request->user())->where('status', 'active')->orderBy('display_name')->get(['id', 'display_name']),
         ]);
     }
 
     public function store(StoreSignatureRequestRequest $request)
     {
         [$class] = self::SUBJECT_TYPES[$request->validated('subject_type')];
-        $subject = $class::query()->find($request->validated('subject_id'));
+        $subject = $class::query()->visibleTo($request->user())->find($request->validated('subject_id'));
 
         if (! $subject) {
             return back()->with('danger', 'Der Vorgang wurde nicht gefunden.')->withInput();
@@ -138,6 +156,8 @@ class SignatureRequestController extends Controller
 
     public function show(SignatureRequest $signatureRequest)
     {
+        $this->pruefeSichtbarkeit($signatureRequest);
+
         $signatureRequest->load(['participants.entity', 'subject', 'document', 'creator']);
 
         return view('signatures.show', [
@@ -149,6 +169,8 @@ class SignatureRequestController extends Controller
 
     public function send(SignatureRequest $signatureRequest)
     {
+        $this->pruefeSichtbarkeit($signatureRequest);
+
         if ($signatureRequest->status === SignatureRequestStatus::Completed) {
             return redirect()
                 ->route('signatures.show', $signatureRequest)
@@ -182,6 +204,8 @@ class SignatureRequestController extends Controller
      */
     public function sync(SignatureRequest $signatureRequest)
     {
+        $this->pruefeSichtbarkeit($signatureRequest);
+
         try {
             $this->signatures->syncStatus($signatureRequest);
         } catch (\Throwable $e) {
@@ -200,6 +224,8 @@ class SignatureRequestController extends Controller
     /** Teilnehmerstatus manuell pflegen (Abschnitt 102, manueller Adapter). */
     public function mark(MarkSignatureParticipantRequest $request, SignatureRequest $signatureRequest)
     {
+        $this->pruefeSichtbarkeit($signatureRequest);
+
         $participant = $signatureRequest->participants()
             ->whereKey($request->validated('participant_id'))
             ->first();
@@ -237,6 +263,8 @@ class SignatureRequestController extends Controller
         SignatureRequest $signatureRequest,
         DocumentStorageInterface $storage,
     ) {
+        $this->pruefeSichtbarkeit($signatureRequest);
+
         if ($signatureRequest->status === SignatureRequestStatus::Completed) {
             return redirect()
                 ->route('signatures.show', $signatureRequest)
@@ -269,7 +297,7 @@ class SignatureRequestController extends Controller
      * (Beschluss, Vertrag, Aktionärsliste) oder verknüpftes PDF
      * (z. B. Vertrag einer Aktienbewegung).
      */
-    private function subjectDocument(object $subject): ?\App\Models\Document
+    private function subjectDocument(object $subject): ?Document
     {
         if (method_exists($subject, 'document')) {
             $document = $subject->document()->first();

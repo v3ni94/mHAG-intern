@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Loans;
 
 use App\Enums\PaymentOrigin;
+use App\Models\BankAccount;
 use App\Models\Entity;
 use App\Models\Loan;
 use App\Support\Money;
@@ -123,7 +124,7 @@ class StorePaymentRequest extends LoansFormRequest
         if (! $accountId) {
             return;
         }
-        $belongs = \App\Models\BankAccount::where('id', $accountId)->where('entity_id', $entityId)->exists();
+        $belongs = BankAccount::where('id', $accountId)->where('entity_id', $entityId)->exists();
         if (! $belongs) {
             $validator->errors()->add($field, $message);
         }

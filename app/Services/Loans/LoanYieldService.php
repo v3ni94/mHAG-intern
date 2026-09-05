@@ -135,7 +135,7 @@ class LoanYieldService
      * dieser Zeitraum wuerde den Mittelwert ohne Aussagewert verwaessern.
      *
      * @param  array<int, array{date: string, amount: string}>  $events
-     * @return array{0: ?string, 1: int, 2: string}  [Beginn, Tage, Mittelwert]
+     * @return array{0: ?string, 1: int, 2: string} [Beginn, Tage, Mittelwert]
      */
     protected function averageCapital(array $events, string $asOfStr): array
     {
@@ -283,7 +283,7 @@ class LoanYieldService
      * Jahreswert ergibt sich aus (1 + Tagessatz)^365 - 1.
      *
      * @param  array<int, array{date: string, amount: string, label: string}>  $flows
-     * @return array{0: ?string, 1: ?string}  [Prozentsatz, Hinweis wenn nicht berechenbar]
+     * @return array{0: ?string, 1: ?string} [Prozentsatz, Hinweis wenn nicht berechenbar]
      */
     public function internalRateOfReturn(array $flows): array
     {

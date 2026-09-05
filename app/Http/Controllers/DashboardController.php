@@ -11,9 +11,7 @@ use Illuminate\View\View;
  */
 class DashboardController extends Controller
 {
-    public function __construct(private readonly DashboardService $dashboard)
-    {
-    }
+    public function __construct(private readonly DashboardService $dashboard) {}
 
     public function index(Request $request): View
     {

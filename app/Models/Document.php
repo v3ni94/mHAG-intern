@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\DocumentStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -20,7 +21,7 @@ class Document extends Model
             'tags' => 'array',
             'document_date' => 'date',
             'expires_on' => 'date',
-            'status' => \App\Enums\DocumentStatus::class,
+            'status' => DocumentStatus::class,
         ];
     }
 

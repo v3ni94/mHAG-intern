@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Enums\BookingType;
+use App\Enums\EntityType;
 use App\Enums\PaymentOrigin;
 use App\Http\Requests\Loans\CancelPaymentRequest;
 use App\Http\Requests\Loans\StorePaymentRequest;
+use App\Models\BankAccount;
+use App\Models\Entity;
 use App\Models\Loan;
 use App\Models\LoanTransaction;
 use App\Models\Payment;
@@ -18,6 +21,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
 use Illuminate\View\View;
 
 /**
@@ -99,7 +103,7 @@ class PaymentController extends Controller
             ->merge($loans->pluck('borrower_entity_id'))
             ->filter()->unique()->values();
 
-        $accountQuery = \App\Models\BankAccount::query()
+        $accountQuery = BankAccount::query()
             ->whereIn('entity_id', $entityIds)
             ->where('is_active', true)
             ->orderBy('bank_name')
@@ -151,14 +155,14 @@ class PaymentController extends Controller
     }
 
     /** Link auf die Akte der Partei (Reiter Bankkonten), falls verfügbar. */
-    private function entityUrl(?\App\Models\Entity $entity): ?string
+    private function entityUrl(?Entity $entity): ?string
     {
         if (! $entity) {
             return null;
         }
 
-        $routeName = $entity->type === \App\Enums\EntityType::Person ? 'persons.show' : 'companies.show';
-        if (! \Illuminate\Support\Facades\Route::has($routeName)) {
+        $routeName = $entity->type === EntityType::Person ? 'persons.show' : 'companies.show';
+        if (! Route::has($routeName)) {
             return null;
         }
 

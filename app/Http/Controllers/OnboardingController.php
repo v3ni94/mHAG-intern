@@ -6,11 +6,12 @@ use App\Models\Address;
 use App\Models\Company;
 use App\Models\CorporateBody;
 use App\Models\CorporateBodyMember;
+use App\Models\Entity;
 use App\Models\Loan;
 use App\Models\Person;
 use App\Models\Setting;
-use App\Models\ShareTransaction;
 use App\Models\Shareholder;
+use App\Models\ShareTransaction;
 use App\Models\User;
 use App\Models\UserInvitation;
 use App\Services\AuditService;
@@ -334,6 +335,6 @@ class OnboardingController extends Controller
             return (int) $id;
         }
 
-        return \App\Models\Entity::query()->where('internal_number', 'ENT-MHAG')->value('id');
+        return Entity::query()->where('internal_number', 'ENT-MHAG')->value('id');
     }
 }

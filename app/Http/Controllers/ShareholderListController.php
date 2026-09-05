@@ -7,6 +7,7 @@ use App\Models\ShareholderListSnapshot;
 use App\Services\AuditService;
 use App\Services\Holding\ShareholdingService;
 use App\Services\Storage\DocumentStorageInterface;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
 /**
@@ -18,8 +19,7 @@ class ShareholderListController extends Controller
     public function __construct(
         private readonly ShareholdingService $shareholding,
         private readonly DocumentStorageInterface $storage,
-    ) {
-    }
+    ) {}
 
     public function create(CreateListSnapshotRequest $request)
     {
@@ -39,8 +39,15 @@ class ShareholderListController extends Controller
             ));
     }
 
-    public function download(ShareholderListSnapshot $snapshot)
+    public function download(Request $request, ShareholderListSnapshot $snapshot)
     {
+        // Eine Aktionaersliste ist der vollstaendige Bestand. Sie erhaelt nur,
+        // wem kein Aktionaer verborgen ist.
+        abort_unless(
+            ShareholderListSnapshot::query()->visibleTo($request->user())->whereKey($snapshot->getKey())->exists(),
+            404,
+        );
+
         $document = $snapshot->document()->first();
         abort_if(! $document, 404, 'Zu dieser Aktionärsliste ist kein Dokument hinterlegt.');
 

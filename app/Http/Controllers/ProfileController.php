@@ -2,21 +2,25 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\LoginAttempt;
 use App\Services\AuditService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
 
 class ProfileController extends Controller
 {
-    public function edit(Request $request): \Illuminate\View\View
+    public function edit(Request $request): View
     {
         return view('profile.edit', [
             'user' => $request->user(),
             'sessions' => $this->sessions($request),
-            'loginHistory' => \App\Models\LoginAttempt::query()
+            'loginHistory' => LoginAttempt::query()
                 ->where('user_id', $request->user()->id)
                 ->latest('created_at')
                 ->limit(15)
@@ -63,14 +67,14 @@ class ProfileController extends Controller
         return back();
     }
 
-    private function sessions(Request $request): \Illuminate\Support\Collection
+    private function sessions(Request $request): Collection
     {
         if (config('session.driver') !== 'database') {
             return collect();
         }
 
         return collect(
-            \Illuminate\Support\Facades\DB::table('sessions')
+            DB::table('sessions')
                 ->where('user_id', $request->user()->id)
                 ->orderByDesc('last_activity')
                 ->limit(10)

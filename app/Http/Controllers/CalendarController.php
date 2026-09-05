@@ -13,6 +13,7 @@ use App\Models\Resolution;
 use App\Models\Security;
 use App\Models\User;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\View\View;
@@ -72,7 +73,7 @@ class CalendarController extends Controller
     private function events(User $user, Carbon $from, Carbon $to): array
     {
         $events = [];
-        $add = function (?\Carbon\CarbonInterface $date, string $type, string $label, string $severity, ?string $url = null) use (&$events, $from, $to) {
+        $add = function (?CarbonInterface $date, string $type, string $label, string $severity, ?string $url = null) use (&$events, $from, $to) {
             if (! $date || $date->lt($from) || $date->gt($to)) {
                 return;
             }
@@ -131,6 +132,7 @@ class CalendarController extends Controller
 
             // Organmandate
             CorporateBodyMember::query()->with(['person:id,display_name', 'body:id,name'])
+                ->whereHas('body', fn ($q) => $q->visibleTo($user))
                 ->whereBetween('ended_on', [$from->toDateString(), $to->toDateString()])
                 ->get()
                 ->each(fn (CorporateBodyMember $m) => $add($m->ended_on, 'Mandat', sprintf('Mandatsende %s (%s)', $m->person?->display_name ?? '', $m->body?->name ?? ''), 'warning', $this->url('corporate-bodies.index')));
@@ -138,6 +140,7 @@ class CalendarController extends Controller
 
         if ($user->can('resolutions.view')) {
             Resolution::query()
+                ->visibleTo($user)
                 ->whereBetween('resolved_on', [$from->toDateString(), $to->toDateString()])
                 ->get()
                 ->each(fn (Resolution $r) => $add($r->resolved_on, 'Beschluss', sprintf('Beschluss %s: %s', $r->resolution_number, $r->title), 'info', $this->url('resolutions.show', $r->id)));

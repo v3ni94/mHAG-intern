@@ -5,6 +5,7 @@ namespace App\Services\Loans;
 use App\Enums\BookingType;
 use App\Enums\InterestMethod;
 use App\Enums\RepaymentItemStatus;
+use App\Enums\RepaymentItemType;
 use App\Models\Loan;
 use App\Models\LoanTransaction;
 use App\Models\RepaymentPlanItem;
@@ -13,6 +14,7 @@ use App\Services\AuditService;
 use App\Support\Money;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -274,7 +276,7 @@ class DefaultInterestService
     /**
      * Ueberfaelliger Betrag zum Tag $dateStr.
      *
-     * @param  \Illuminate\Support\Collection<int, RepaymentPlanItem>  $items
+     * @param  Collection<int, RepaymentPlanItem>  $items
      */
     protected function overdueBaseAt($items, string $dateStr): string
     {
@@ -308,7 +310,7 @@ class DefaultInterestService
     /**
      * Planzeilen, die Verzug begruenden koennen.
      *
-     * @return \Illuminate\Support\Collection<int, RepaymentPlanItem>
+     * @return Collection<int, RepaymentPlanItem>
      */
     protected function relevantItems(Loan $loan, string $basis)
     {
@@ -316,7 +318,7 @@ class DefaultInterestService
             ->whereIn('status', array_map(fn (RepaymentItemStatus $s) => $s->value, self::REAL_ACTUAL_STATUSES))
             ->when(
                 $basis === self::BASIS_OVERDUE_PRINCIPAL,
-                fn ($q) => $q->where('item_type', \App\Enums\RepaymentItemType::Principal->value),
+                fn ($q) => $q->where('item_type', RepaymentItemType::Principal->value),
             )
             ->orderBy('due_date')
             ->orderBy('id')
@@ -334,7 +336,7 @@ class DefaultInterestService
         return $net;
     }
 
-    /** @return \Illuminate\Support\Collection<int, LoanTransaction> */
+    /** @return Collection<int, LoanTransaction> */
     protected function ownTransactions(Loan $loan)
     {
         return LoanTransaction::query()

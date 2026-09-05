@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\EntityScopeMode;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,6 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
@@ -41,7 +43,7 @@ class User extends Authenticatable
             'privacy_mode' => 'boolean',
             'two_factor_secret' => 'encrypted',
             'two_factor_recovery_codes' => 'encrypted:array',
-            'entity_scope_mode' => \App\Enums\EntityScopeMode::class,
+            'entity_scope_mode' => EntityScopeMode::class,
         ];
     }
 
@@ -211,7 +213,7 @@ class User extends Authenticatable
         }
 
         try {
-            return \Illuminate\Support\Facades\Storage::disk('avatars')->exists($this->avatar_path);
+            return Storage::disk('avatars')->exists($this->avatar_path);
         } catch (\Throwable) {
             return false;
         }
@@ -250,23 +252,23 @@ class User extends Authenticatable
      * Benutzer sieht dann nur ausdrücklich zugeordnete Entitäten und nicht
      * versehentlich den Gesamtbestand.
      */
-    public function entityScopeMode(): \App\Enums\EntityScopeMode
+    public function entityScopeMode(): EntityScopeMode
     {
         $roh = $this->getAttributes()['entity_scope_mode'] ?? null;
 
-        if ($roh instanceof \App\Enums\EntityScopeMode) {
+        if ($roh instanceof EntityScopeMode) {
             return $roh;
         }
 
-        return \App\Enums\EntityScopeMode::tryFrom((string) $roh)
-            ?? \App\Enums\EntityScopeMode::Include;
+        return EntityScopeMode::tryFrom((string) $roh)
+            ?? EntityScopeMode::Include;
     }
 
     /** Arbeitet dieser Benutzer im Ausschlussmodus (alles ausser ...)? */
     public function usesEntityExclusion(): bool
     {
         return ! $this->isInternal()
-            && $this->entityScopeMode() === \App\Enums\EntityScopeMode::Exclude;
+            && $this->entityScopeMode() === EntityScopeMode::Exclude;
     }
 
     /**

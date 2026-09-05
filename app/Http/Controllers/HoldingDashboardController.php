@@ -8,10 +8,13 @@ use App\Models\Investment;
 use App\Models\Loan;
 use App\Models\Resolution;
 use App\Models\Setting;
+use App\Models\Shareholder;
 use App\Models\ShareTransaction;
 use App\Models\SignatureRequest;
 use App\Services\Holding\ShareholdingService;
+use App\Services\Loans\LoanBalanceService;
 use App\Support\Money;
+use Illuminate\Http\Request;
 
 /**
  * Holding-Dashboard (Abschnitt 106): KPI-Karten und Widgets.
@@ -33,20 +36,36 @@ class HoldingDashboardController extends Controller
         SignatureRequestStatus::InProgress,
     ];
 
-    public function index(ShareholdingService $shareholding)
+    public function index(Request $request, ShareholdingService $shareholding)
     {
+        $user = $request->user();
+
+        /*
+         * Die Aktionaersstruktur wird ueber den Gesamtbestand gerechnet, die
+         * Prozentwerte beziehen sich also weiterhin auf das gesamte
+         * Grundkapital. Angezeigt werden aber nur die sichtbaren Aktionaere.
+         * Die Rechnung zu beschneiden waere falsch, die Anzeige nicht zu
+         * beschneiden waere ein Datenabfluss.
+         */
+        $sichtbareAktionaere = Shareholder::query()->visibleTo($user)->pluck('id')->all();
+
         $holdings = $shareholding->holdingsAsOf();
-        $activeHoldings = $holdings->filter(fn (array $row) => $row['shares'] > 0)->values();
+        $activeHoldings = $holdings
+            ->filter(fn (array $row) => $row['shares'] > 0
+                && in_array($row['shareholder']->id, $sichtbareAktionaere, true))
+            ->values();
 
         $kpis = [
             'base_capital' => (string) Setting::get('holding', 'base_capital', '0'),
             'total_shares' => $shareholding->totalShares(),
             'shareholder_count' => $activeHoldings->count(),
-            'investment_count' => Investment::query()->where('status', 'active')->count(),
+            'investment_count' => Investment::query()->visibleTo($user)->where('status', 'active')->count(),
             'open_resolutions' => Resolution::query()
+                ->visibleTo($user)
                 ->whereIn('status', array_map(fn ($s) => $s->value, self::OPEN_RESOLUTION_STATUSES))
                 ->count(),
             'open_signatures' => SignatureRequest::query()
+                ->visibleTo($user)
                 ->whereIn('status', array_map(fn ($s) => $s->value, self::OPEN_SIGNATURE_STATUSES))
                 ->count(),
         ];
@@ -56,14 +75,15 @@ class HoldingDashboardController extends Controller
         // ausgeliefert, werden die Kennzahlen als "nicht verfügbar" angezeigt,
         // es werden keine Werte erfunden (Abschnitt 140).
         $loanKpis = null;
-        if (class_exists(\App\Services\Loans\LoanBalanceService::class)) {
+        if (class_exists(LoanBalanceService::class)) {
             $mhagEntityId = Setting::get('holding', 'company_entity_id');
             $loans = Loan::query()
+                ->visibleTo($user)
                 ->where('lender_entity_id', $mhagEntityId)
                 ->whereNotIn('status', ['archived'])
                 ->get();
 
-            $balanceService = app(\App\Services\Loans\LoanBalanceService::class);
+            $balanceService = app(LoanBalanceService::class);
             $totalReceivable = '0.00';
             $overdue = '0.00';
             $interestOpen = '0.00';
@@ -83,18 +103,21 @@ class HoldingDashboardController extends Controller
 
         // Widgets
         $recentTransactions = ShareTransaction::query()
+            ->visibleTo($user)
             ->with(['buyer.entity', 'seller.entity'])
             ->orderByDesc('created_at')
             ->limit(5)
             ->get();
 
         $recentResolutions = Resolution::query()
+            ->visibleTo($user)
             ->with('company')
             ->orderByDesc('created_at')
             ->limit(5)
             ->get();
 
         $openSignatureRequests = SignatureRequest::query()
+            ->visibleTo($user)
             ->with(['participants.entity', 'subject'])
             ->whereIn('status', array_map(fn ($s) => $s->value, self::OPEN_SIGNATURE_STATUSES))
             ->orderByDesc('created_at')

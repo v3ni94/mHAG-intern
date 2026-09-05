@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\EntityType;
+use App\Http\Requests\MasterData\ContactDetailRequest;
 use App\Models\BankAccount;
 use App\Models\ContactDetail;
 use App\Models\Document;
@@ -170,7 +171,7 @@ class EntitySearchController extends Controller
                 'title' => $c->value,
                 'subtitle' => implode(' · ', array_filter([
                     $c->entity?->display_name,
-                    \App\Http\Requests\MasterData\ContactDetailRequest::typeOptions()[$c->type] ?? $c->type,
+                    ContactDetailRequest::typeOptions()[$c->type] ?? $c->type,
                 ])),
                 'url' => $c->entity ? $this->entityUrl($c->entity, $c->entity->type === EntityType::Person ? 'kontakt' : 'ansprechpartner') : null,
                 'badge' => null,
@@ -241,14 +242,13 @@ class EntitySearchController extends Controller
                 $sub->where('resolution_number', 'like', $like)->orWhere('title', 'like', $like);
             });
 
-        if (! $user->isInternal()) {
-            $ids = $user->accessibleEntityIds();
-            $query->where(function ($sub) use ($ids) {
-                $sub->whereIn('company_entity_id', $ids)
-                    ->orWhereIn('applicant_entity_id', $ids)
-                    ->orWhereHas('participants', fn ($p) => $p->whereIn('entity_id', $ids));
-            });
-        }
+        /*
+         * Die Einschraenkung stand hier zweimal in der Anwendung, einmal von
+         * Hand und einmal als Modell-Scope, und sie waren nicht
+         * deckungsgleich. Die Suche darf nichts auffindbar machen, was die
+         * Detailseite anschliessend verweigert.
+         */
+        $query->visibleTo($user);
 
         $items = $query->limit(self::LIMIT_PER_GROUP)->get()
             ->map(fn (Resolution $r) => [
@@ -274,13 +274,7 @@ class EntitySearchController extends Controller
                 $sub->where('transaction_number', 'like', $like)->orWhere('note', 'like', $like);
             });
 
-        if (! $user->isInternal()) {
-            $ids = $user->accessibleEntityIds();
-            $query->where(function ($sub) use ($ids) {
-                $sub->whereHas('buyer', fn ($b) => $b->whereIn('entity_id', $ids))
-                    ->orWhereHas('seller', fn ($s) => $s->whereIn('entity_id', $ids));
-            });
-        }
+        $query->visibleTo($user);
 
         $items = $query->limit(self::LIMIT_PER_GROUP)->get()
             ->map(fn (ShareTransaction $t) => [

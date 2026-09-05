@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Documents\StoreContractAmendmentRequest;
 use App\Http\Requests\Documents\StoreContractRequest;
 use App\Models\Contract;
 use App\Models\ContractTemplate;
@@ -11,9 +12,11 @@ use App\Models\User;
 use App\Services\AuditService;
 use App\Services\ContractGenerationService;
 use App\Services\NumberSequenceService;
+use App\Services\Storage\DocumentStorageInterface;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 /**
  * Vertragserstellung mit Snapshot-Prinzip (Abschnitte 54/55 Masterprompt):
@@ -72,7 +75,7 @@ class ContractController extends Controller
         $missing = $this->generator->missingPlaceholders($version, $data);
 
         $contract = Contract::create([
-            'contract_number' => 'ENTWURF-'.strtoupper(\Illuminate\Support\Str::random(8)),
+            'contract_number' => 'ENTWURF-'.strtoupper(Str::random(8)),
             'loan_id' => $loan?->id,
             'contract_template_version_id' => $version->id,
             'title' => $request->input('title'),
@@ -110,7 +113,7 @@ class ContractController extends Controller
         return view('contracts.show', [
             'contract' => $contract,
             'missing' => $missing,
-            'amendmentTypes' => \App\Http\Requests\Documents\StoreContractAmendmentRequest::AMENDMENT_TYPES,
+            'amendmentTypes' => StoreContractAmendmentRequest::AMENDMENT_TYPES,
         ]);
     }
 
@@ -170,7 +173,7 @@ class ContractController extends Controller
     }
 
     /** PDF-Ausgabe: final aus der Dokumentenablage, Entwürfe als Vorschau mit ENTWURF-Kennzeichnung. */
-    public function pdf(Request $request, Contract $contract, \App\Services\Storage\DocumentStorageInterface $storage)
+    public function pdf(Request $request, Contract $contract, DocumentStorageInterface $storage)
     {
         $contract = $this->scopedQuery($request->user())->with(['loan', 'document'])->findOrFail($contract->id);
 

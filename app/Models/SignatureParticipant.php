@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\SignatureParticipantStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -12,7 +13,7 @@ class SignatureParticipant extends Model
     protected function casts(): array
     {
         return [
-            'status' => \App\Enums\SignatureParticipantStatus::class,
+            'status' => SignatureParticipantStatus::class,
             'status_changed_at' => 'datetime',
         ];
     }

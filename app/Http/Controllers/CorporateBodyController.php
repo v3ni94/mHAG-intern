@@ -35,6 +35,7 @@ class CorporateBodyController extends Controller
         $companyEntityId = Setting::get('holding', 'company_entity_id');
 
         $bodies = CorporateBody::query()
+            ->visibleTo($request->user())
             ->with('company')
             ->where('company_entity_id', $companyEntityId)
             ->orderBy('type')
@@ -54,6 +55,11 @@ class CorporateBodyController extends Controller
 
     public function show(Request $request, CorporateBody $corporateBody)
     {
+        abort_unless(
+            CorporateBody::query()->visibleTo($request->user())->whereKey($corporateBody->getKey())->exists(),
+            404,
+        );
+
         $request->validate(
             ['as_of' => ['nullable', 'date']],
             ['as_of.date' => 'Der Stichtag muss ein gültiges Datum sein.'],

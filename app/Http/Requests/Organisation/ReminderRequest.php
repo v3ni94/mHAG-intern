@@ -98,16 +98,15 @@ class ReminderRequest extends FormRequest
             'entity' => Entity::query()->visibleTo($benutzer)->whereKey($id)->exists(),
             'loan' => Loan::query()->visibleTo($benutzer)->whereKey($id)->exists(),
             'contract' => Contract::query()->visibleTo($benutzer)->whereKey($id)->exists(),
-            // Für die Holding-Vorgänge gibt es noch keinen Entity-Scope. Bis
-            // dahin gilt die Berechtigung als Schranke: ohne sie ist der
-            // Vorgang auf seiner eigenen Seite mit 403 gesperrt, und dann darf
-            // er auch hier nicht als Bezug dienen.
+            // Berechtigung UND Sichtbarkeit: die Berechtigung entscheidet, ob
+            // der Bereich ueberhaupt offensteht, der Scope, welcher Vorgang
+            // darin sichtbar ist.
             'resolution' => (bool) $benutzer?->can('resolutions.view')
-                && Resolution::query()->whereKey($id)->exists(),
+                && Resolution::query()->visibleTo($benutzer)->whereKey($id)->exists(),
             'share_transaction' => (bool) $benutzer?->can('shares.view')
-                && ShareTransaction::query()->whereKey($id)->exists(),
+                && ShareTransaction::query()->visibleTo($benutzer)->whereKey($id)->exists(),
             'investment' => (bool) $benutzer?->can('shares.view')
-                && Investment::query()->whereKey($id)->exists(),
+                && Investment::query()->visibleTo($benutzer)->whereKey($id)->exists(),
             default => false,
         };
     }

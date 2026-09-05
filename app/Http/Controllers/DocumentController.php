@@ -3,23 +3,24 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DocumentStatus;
+use App\Enums\EntityType;
 use App\Http\Requests\Documents\LinkDocumentRequest;
 use App\Http\Requests\Documents\StoreDocumentRequest;
 use App\Http\Requests\Documents\StoreDocumentVersionRequest;
 use App\Models\Contract;
+use App\Models\CorporateBodyMember;
 use App\Models\Document;
 use App\Models\Entity;
-use App\Models\CorporateBodyMember;
 use App\Models\Guarantee;
 use App\Models\IdentityDocument;
 use App\Models\Investment;
-use App\Models\Payment;
-use App\Models\User;
 use App\Models\Loan;
+use App\Models\Payment;
 use App\Models\Reminder;
 use App\Models\Resolution;
 use App\Models\Security;
 use App\Models\ShareTransaction;
+use App\Models\User;
 use App\Services\AuditService;
 use App\Services\Storage\DocumentStorageInterface;
 use App\Services\Storage\FlysystemDocumentStorage;
@@ -207,7 +208,7 @@ class DocumentController extends Controller
 
         // Benutzernamen der Versions-Uploader (DocumentVersion hat keine
         // uploader-Relation; Model gehört der Foundation und bleibt unberührt).
-        $versionUploaders = \App\Models\User::query()
+        $versionUploaders = User::query()
             ->whereIn('id', $document->versions->pluck('uploaded_by')->filter()->unique())
             ->pluck('name', 'id');
 
@@ -441,7 +442,7 @@ class DocumentController extends Controller
         }
 
         if ($linkable instanceof Entity) {
-            $base = $linkable->type === \App\Enums\EntityType::Person
+            $base = $linkable->type === EntityType::Person
                 ? ($folders['persons'] ?? 'personen')
                 : ($folders['companies'] ?? 'unternehmen');
 

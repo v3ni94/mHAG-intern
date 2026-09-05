@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\DailyFact;
 use App\Services\AuditService;
+use App\Services\DailyEventService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Validator;
 use Illuminate\View\View;
 
@@ -33,7 +35,7 @@ class DailyFactController extends Controller
         'is_active' => 'Aktiv',
     ];
 
-    public function index(Request $request, \App\Services\DailyEventService $events): View
+    public function index(Request $request, DailyEventService $events): View
     {
         $entries = DailyFact::query()
             ->when($request->filled('monat'), fn ($q) => $q->where('month_day', 'like', $request->query('monat').'-%'))
@@ -47,7 +49,7 @@ class DailyFactController extends Controller
             'today' => now()->format('m-d'),
             'coverage' => $events->coverage(),
             'heute' => $events->forDate(),
-            'monatsnamen' => \App\Services\DailyEventService::monatsnamen(),
+            'monatsnamen' => DailyEventService::monatsnamen(),
         ]);
     }
 
@@ -134,7 +136,7 @@ class DailyFactController extends Controller
         if ($recurring) {
             $data['specific_date'] = null;
         } else {
-            $data['month_day'] = \Illuminate\Support\Carbon::parse($data['specific_date'])->format('m-d');
+            $data['month_day'] = Carbon::parse($data['specific_date'])->format('m-d');
         }
 
         $data['recurring'] = $recurring;

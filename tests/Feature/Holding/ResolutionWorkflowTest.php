@@ -7,6 +7,7 @@ use App\Enums\SignatureRequestStatus;
 use App\Models\Document;
 use App\Models\Resolution;
 use App\Models\SignatureRequest;
+use App\Services\Holding\ResolutionService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -52,7 +53,7 @@ class ResolutionWorkflowTest extends HoldingTestCase
             'votes' => [$participant->id => 'yes'],
         ])->assertRedirect(route('resolutions.show', $resolution));
 
-        $summary = app(\App\Services\Holding\ResolutionService::class)->voteSummary($resolution->fresh());
+        $summary = app(ResolutionService::class)->voteSummary($resolution->fresh());
         $this->assertSame(['yes' => 1, 'no' => 0, 'abstain' => 0, 'absent' => 0], $summary);
 
         // 6. Ergebnis erfassen

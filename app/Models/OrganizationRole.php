@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\OrganizationRoleType;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -12,7 +13,7 @@ class OrganizationRole extends Model
     protected function casts(): array
     {
         return [
-            'role' => \App\Enums\OrganizationRoleType::class,
+            'role' => OrganizationRoleType::class,
             'started_on' => 'date',
             'ended_on' => 'date',
             'is_active' => 'boolean',

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Holding;
 
+use App\Enums\EntityType;
 use App\Models\CorporateBody;
 use App\Models\CorporateBodyMember;
 use App\Models\Entity;
@@ -32,7 +33,7 @@ class CorporateBodyTest extends HoldingTestCase
         $board = CorporateBody::query()->where('type', 'board')->firstOrFail();
 
         $person = Entity::create([
-            'type' => \App\Enums\EntityType::Person,
+            'type' => EntityType::Person,
             'display_name' => 'Neues Vorstandsmitglied',
             'status' => 'active',
             'internal_number' => 'ENT-TEST-NVM',
@@ -68,7 +69,7 @@ class CorporateBodyTest extends HoldingTestCase
         $board = CorporateBody::query()->where('type', 'board')->firstOrFail();
 
         $person = Entity::create([
-            'type' => \App\Enums\EntityType::Person,
+            'type' => EntityType::Person,
             'display_name' => 'Ehemaliges Mitglied',
             'status' => 'active',
             'internal_number' => 'ENT-TEST-ALT',

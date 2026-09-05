@@ -3,6 +3,7 @@
 namespace Tests\Feature\Holding;
 
 use App\Models\Resolution;
+use App\Models\User;
 
 /**
  * Beschlussregister (Abschnitt 98): Filter nach Jahr, Organ, Status und
@@ -92,7 +93,7 @@ class ResolutionRegisterTest extends HoldingTestCase
 
     public function test_register_erfordert_berechtigung(): void
     {
-        $user = \App\Models\User::factory()->create(['is_active' => true]);
+        $user = User::factory()->create(['is_active' => true]);
         // Rolle ohne resolutions.view
         $user->assignRole('Darlehensnehmer');
 

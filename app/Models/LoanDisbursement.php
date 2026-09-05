@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use App\Enums\DisbursementStatus;
+use App\Enums\PaymentOrigin;
+use App\Support\Money;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -16,8 +19,8 @@ class LoanDisbursement extends Model
             'actual_amount' => 'decimal:2',
             'planned_date' => 'date',
             'actual_date' => 'date',
-            'status' => \App\Enums\DisbursementStatus::class,
-            'origin' => \App\Enums\PaymentOrigin::class,
+            'status' => DisbursementStatus::class,
+            'origin' => PaymentOrigin::class,
             'recorded_at' => 'datetime',
         ];
     }
@@ -52,9 +55,9 @@ class LoanDisbursement extends Model
     public function effectiveAmount(): string
     {
         return match ($this->status) {
-            \App\Enums\DisbursementStatus::Confirmed,
-            \App\Enums\DisbursementStatus::Partial => \App\Support\Money::normalize($this->actual_amount),
-            \App\Enums\DisbursementStatus::Assumed => \App\Support\Money::normalize($this->planned_amount),
+            DisbursementStatus::Confirmed,
+            DisbursementStatus::Partial => Money::normalize($this->actual_amount),
+            DisbursementStatus::Assumed => Money::normalize($this->planned_amount),
             default => '0.00',
         };
     }

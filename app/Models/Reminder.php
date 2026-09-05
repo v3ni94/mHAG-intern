@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\ReminderPriority;
+use App\Enums\ReminderStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -14,8 +16,8 @@ class Reminder extends Model
     {
         return [
             'due_date' => 'date',
-            'priority' => \App\Enums\ReminderPriority::class,
-            'status' => \App\Enums\ReminderStatus::class,
+            'priority' => ReminderPriority::class,
+            'status' => ReminderStatus::class,
         ];
     }
 

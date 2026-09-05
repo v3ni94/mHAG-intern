@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Services\AuditService;
 use App\Services\BackupService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,9 +16,7 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
  */
 class BackupController extends Controller
 {
-    public function __construct(private readonly BackupService $backups)
-    {
-    }
+    public function __construct(private readonly BackupService $backups) {}
 
     public function index(): View
     {
@@ -43,7 +42,7 @@ class BackupController extends Controller
         $path = $this->backups->filePath($file);
         abort_if($path === null, 404);
 
-        \App\Services\AuditService::log('admin.backups.downloaded', null, [], ['file' => $file]);
+        AuditService::log('admin.backups.downloaded', null, [], ['file' => $file]);
 
         return response()->download($path);
     }

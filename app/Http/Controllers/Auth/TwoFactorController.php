@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
 use PragmaRX\Google2FA\Google2FA;
 
 class TwoFactorController extends Controller
@@ -20,7 +21,7 @@ class TwoFactorController extends Controller
     /**
      * Einrichtungsseite: QR-Code + manueller Secret Key (Abschnitt 16).
      */
-    public function setup(Request $request): \Illuminate\View\View
+    public function setup(Request $request): View
     {
         $user = $request->user();
         $bestaetigt = $user->two_factor_confirmed_at !== null;

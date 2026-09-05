@@ -20,8 +20,7 @@ class ResolutionService
 {
     public function __construct(
         private readonly DocumentStorageInterface $storage,
-    ) {
-    }
+    ) {}
 
     /** Nächste Beschlussnummer, z. B. VOR-2026-001 (Abschnitt 92). */
     public function nextNumber(ResolutionType $type): string

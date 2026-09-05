@@ -70,7 +70,7 @@ class StoreCompanyRequest extends MasterDataFormRequest
             'industry' => 'Branche',
             'tags' => 'Tags',
             'notes' => 'Interne Notizen',
-                    'address_type' => 'Adressart',
+            'address_type' => 'Adressart',
             'address_street' => 'Straße',
             'address_house_number' => 'Hausnummer',
             'address_addition' => 'Adresszusatz',

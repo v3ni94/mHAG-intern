@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use App\Enums\EntityType;
 use App\Enums\ResolutionStatus;
 use App\Enums\ResolutionType;
-use App\Http\Requests\Holding\StoreResolutionRequest;
 use App\Http\Requests\Holding\StoreResolutionLinkRequest;
+use App\Http\Requests\Holding\StoreResolutionRequest;
 use App\Models\Contract;
 use App\Models\CorporateBody;
 use App\Models\Entity;
@@ -68,13 +68,30 @@ class ResolutionController extends Controller
         'withdrawn' => 'withdrawn',
     ];
 
-    public function __construct(private readonly ResolutionService $resolutions)
+    public function __construct(private readonly ResolutionService $resolutions) {}
+
+    /**
+     * Sichtbarkeit beim direkten Aufruf ueber die Adresszeile.
+     *
+     * Das Route-Binding laedt den Beschluss ohne jede Pruefung. Ohne diese
+     * Wache war jeder Beschluss der Gruppe abrufbar, sobald jemand
+     * resolutions.view besass, unabhaengig von einer gesetzten
+     * Einschraenkung.
+     */
+    private function pruefeSichtbarkeit(Resolution $resolution): void
     {
+        $user = auth()->user();
+
+        abort_unless(
+            $user !== null
+                && Resolution::query()->visibleTo($user)->whereKey($resolution->getKey())->exists(),
+            404,
+        );
     }
 
     public function index(Request $request)
     {
-        $query = Resolution::query()->with(['company']);
+        $query = Resolution::query()->visibleTo($request->user())->with(['company']);
 
         if ($request->filled('year')) {
             $year = (int) $request->input('year');
@@ -172,6 +189,8 @@ class ResolutionController extends Controller
 
     public function show(Resolution $resolution)
     {
+        $this->pruefeSichtbarkeit($resolution);
+
         $resolution->load([
             'company',
             'applicant',
@@ -192,6 +211,8 @@ class ResolutionController extends Controller
 
     public function edit(Resolution $resolution)
     {
+        $this->pruefeSichtbarkeit($resolution);
+
         if (! $this->isEditable($resolution)) {
             return redirect()
                 ->route('resolutions.show', $resolution)
@@ -210,6 +231,8 @@ class ResolutionController extends Controller
 
     public function update(StoreResolutionRequest $request, Resolution $resolution)
     {
+        $this->pruefeSichtbarkeit($resolution);
+
         if (! $this->isEditable($resolution)) {
             return redirect()
                 ->route('resolutions.show', $resolution)
@@ -236,6 +259,8 @@ class ResolutionController extends Controller
     /** Statusaktion im Workflow (Abschnitt 93). */
     public function updateStatus(Request $request, Resolution $resolution)
     {
+        $this->pruefeSichtbarkeit($resolution);
+
         $validated = $request->validate(
             ['status' => ['required', Rule::in(array_map(fn ($s) => $s->value, self::MANUAL_STATUSES))]],
             ['status.in' => 'Dieser Statuswechsel ist nicht zulässig.'],
@@ -274,6 +299,8 @@ class ResolutionController extends Controller
      */
     public function finalize(Resolution $resolution)
     {
+        $this->pruefeSichtbarkeit($resolution);
+
         if ($resolution->result === null) {
             return redirect()
                 ->route('resolutions.show', $resolution)
@@ -305,6 +332,8 @@ class ResolutionController extends Controller
     /** Beschluss-PDF abrufen: abgelegte Fassung oder Vorschau. */
     public function pdf(Resolution $resolution, DocumentStorageInterface $storage)
     {
+        $this->pruefeSichtbarkeit($resolution);
+
         $document = $resolution->document()->first();
 
         if ($document) {
@@ -334,6 +363,8 @@ class ResolutionController extends Controller
     /** Verknüpfung anlegen (Abschnitt 96, Whitelist). */
     public function storeLink(StoreResolutionLinkRequest $request, Resolution $resolution)
     {
+        $this->pruefeSichtbarkeit($resolution);
+
         [$class] = self::LINKABLE_TYPES[$request->validated('linkable_type')];
 
         $target = $class::query()->find($request->validated('linkable_id'));
@@ -361,6 +392,8 @@ class ResolutionController extends Controller
 
     public function destroyLink(Resolution $resolution, ResolutionLink $link)
     {
+        $this->pruefeSichtbarkeit($resolution);
+
         abort_unless($link->resolution_id === $resolution->id, 404);
 
         AuditService::log('resolutions.link-removed', $resolution, [

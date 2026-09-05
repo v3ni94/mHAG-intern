@@ -14,6 +14,7 @@ use App\Models\Resolution;
 use App\Models\Security;
 use App\Models\User;
 use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 
 /**
@@ -261,7 +262,7 @@ class NotificationService
     /** Routen anderer Module defensiv verlinken (Integration erfolgt modulweise). */
     private function url(string $name, mixed $param = null): ?string
     {
-        if (! \Illuminate\Support\Facades\Route::has($name)) {
+        if (! Route::has($name)) {
             return null;
         }
 

@@ -61,7 +61,7 @@ class StorePersonRequest extends MasterDataFormRequest
             'marital_status' => 'Familienstand',
             'tags' => 'Tags',
             'notes' => 'Interne Notizen',
-                    'address_type' => 'Adressart',
+            'address_type' => 'Adressart',
             'address_street' => 'Straße',
             'address_house_number' => 'Hausnummer',
             'address_addition' => 'Adresszusatz',

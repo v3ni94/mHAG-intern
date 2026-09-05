@@ -3,6 +3,7 @@
 namespace Tests\Feature\Holding;
 
 use App\Models\Investment;
+use App\Models\User;
 
 /**
  * Holding-Dashboard (Abschnitt 106): KPI-Karten und Widgets.
@@ -34,7 +35,7 @@ class HoldingDashboardTest extends HoldingTestCase
 
     public function test_dashboard_erfordert_shares_view(): void
     {
-        $user = \App\Models\User::factory()->create(['is_active' => true]);
+        $user = User::factory()->create(['is_active' => true]);
         $user->assignRole('Darlehensnehmer');
 
         $this->actingAs($user);

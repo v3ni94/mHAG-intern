@@ -2,6 +2,10 @@
 
 namespace App\Models;
 
+use App\Enums\PaymentOrigin;
+use App\Enums\RepaymentItemStatus;
+use App\Enums\RepaymentItemType;
+use App\Support\Money;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -12,12 +16,12 @@ class RepaymentPlanItem extends Model
     protected function casts(): array
     {
         return [
-            'item_type' => \App\Enums\RepaymentItemType::class,
+            'item_type' => RepaymentItemType::class,
             'due_date' => 'date',
             'planned_amount' => 'decimal:2',
             'actual_amount' => 'decimal:2',
-            'status' => \App\Enums\RepaymentItemStatus::class,
-            'origin' => \App\Enums\PaymentOrigin::class,
+            'status' => RepaymentItemStatus::class,
+            'origin' => PaymentOrigin::class,
             'actual_date' => 'date',
             'value_date' => 'date',
             'manually_adjusted' => 'boolean',
@@ -42,16 +46,16 @@ class RepaymentPlanItem extends Model
     {
         $status = $this->status;
 
-        if (! $status instanceof \App\Enums\RepaymentItemStatus) {
+        if (! $status instanceof RepaymentItemStatus) {
             return '0.00';
         }
 
         if ($status->giltAlsErfuelltDurchAnnahme()) {
-            return \App\Support\Money::normalize($this->planned_amount);
+            return Money::normalize($this->planned_amount);
         }
 
         if ($status->hatBestaetigtenIst()) {
-            return \App\Support\Money::normalize($this->actual_amount);
+            return Money::normalize($this->actual_amount);
         }
 
         return '0.00';
@@ -62,8 +66,8 @@ class RepaymentPlanItem extends Model
     {
         $status = $this->status;
 
-        return $status instanceof \App\Enums\RepaymentItemStatus && $status->hatBestaetigtenIst()
-            ? \App\Support\Money::normalize($this->actual_amount)
+        return $status instanceof RepaymentItemStatus && $status->hatBestaetigtenIst()
+            ? Money::normalize($this->actual_amount)
             : '0.00';
     }
 
@@ -79,13 +83,13 @@ class RepaymentPlanItem extends Model
     {
         $status = $this->status;
 
-        if ($status instanceof \App\Enums\RepaymentItemStatus && $status->istAbgeschlossenOhneZahlung()) {
+        if ($status instanceof RepaymentItemStatus && $status->istAbgeschlossenOhneZahlung()) {
             return '0.00';
         }
 
-        $open = \App\Support\Money::sub($this->planned_amount, $this->effectiveActual());
+        $open = Money::sub($this->planned_amount, $this->effectiveActual());
 
-        return \App\Support\Money::isNegative($open) ? '0.00' : $open;
+        return Money::isNegative($open) ? '0.00' : $open;
     }
 
     /**
@@ -103,12 +107,12 @@ class RepaymentPlanItem extends Model
     {
         $status = $this->status;
 
-        if ($status instanceof \App\Enums\RepaymentItemStatus && $status->istAbgeschlossenOhneZahlung()) {
+        if ($status instanceof RepaymentItemStatus && $status->istAbgeschlossenOhneZahlung()) {
             return '0.00';
         }
 
-        $offen = \App\Support\Money::sub($this->planned_amount, $this->confirmedActual());
+        $offen = Money::sub($this->planned_amount, $this->confirmedActual());
 
-        return \App\Support\Money::isNegative($offen) ? '0.00' : $offen;
+        return Money::isNegative($offen) ? '0.00' : $offen;
     }
 }

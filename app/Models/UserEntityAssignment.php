@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AssignmentContext;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -13,7 +14,7 @@ class UserEntityAssignment extends Model
     {
         return [
             'is_default' => 'boolean',
-            'context' => \App\Enums\AssignmentContext::class,
+            'context' => AssignmentContext::class,
         ];
     }
 
@@ -31,9 +32,9 @@ class UserEntityAssignment extends Model
         // hier bewusst geladen, damit die Beschriftung nie leer bleibt.
         $this->loadMissing('entity');
         $name = $this->entity?->display_name ?: 'Ohne Zuordnung';
-        $kontext = $this->context instanceof \App\Enums\AssignmentContext ? $this->context : null;
+        $kontext = $this->context instanceof AssignmentContext ? $this->context : null;
 
-        return $kontext && $kontext !== \App\Enums\AssignmentContext::Self
+        return $kontext && $kontext !== AssignmentContext::Self
             ? $name.' ('.$kontext->shortLabel().')'
             : $name;
     }

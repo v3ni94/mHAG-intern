@@ -18,6 +18,13 @@ class ResolutionVoteController extends Controller
 {
     public function store(CastVotesRequest $request, Resolution $resolution)
     {
+        // Ohne diese Pruefung liess sich zu jedem beliebigen Beschluss der
+        // Gruppe abstimmen, schreibend, allein ueber die Adresszeile.
+        abort_unless(
+            Resolution::query()->visibleTo($request->user())->whereKey($resolution->getKey())->exists(),
+            404,
+        );
+
         if (in_array($resolution->status, [ResolutionStatus::Signed, ResolutionStatus::Completed, ResolutionStatus::Archived], true)) {
             return redirect()
                 ->route('resolutions.show', $resolution)

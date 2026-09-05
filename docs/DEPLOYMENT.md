@@ -204,6 +204,61 @@ Zwei Dinge erledigt der Ablauf **nicht**:
 Über die Umgebung `produktion` lässt sich im Repository eine Freigabe durch
 eine zweite Person erzwingen (Settings, Environments, Required reviewers).
 
+## 5a. Täglicher Lauf auf Webspace ohne Kommandozeile
+
+Die Anwendung hat einen Zeitplan (`routes/console.php`):
+
+| Uhrzeit | Aufgabe |
+| --- | --- |
+| 02:00 | Datenbanksicherung |
+| 04:30 | Fortschreibung fälliger Zahlungsplan-Positionen |
+| 05:30 | Prüfung von Fälligkeiten, Abläufen und Wiedervorlagen |
+
+Dieser Zeitplan läuft nur, wenn ihn jemand anstößt. Auf dem IONOS-Webspace
+gibt es dafür keine Kommandozeile, deshalb liegt `cron.php` im
+Wurzelverzeichnis der Anwendung bereit.
+
+**Wichtig:** Ohne diesen Aufruf läuft keine der drei Aufgaben, auch die
+Datenbanksicherung nicht.
+
+### Einrichtung im IONOS-Panel
+
+Cron-Jobs, neuen Auftrag anlegen:
+
+| Feld | Wert |
+| --- | --- |
+| Skript | `/homepages/.../Intranet/cron.php` (voller Pfad zur Datei) |
+| PHP-Fassung | 8.4 |
+| Zeitplan | täglich, etwa 01:30 Uhr |
+
+Der Zeitpunkt muss vor der frühesten geplanten Aufgabe liegen. Ein
+häufigerer Aufruf, etwa stündlich, ist unschädlich: der Zeitplan führt jede
+Aufgabe nur zu ihrer eigenen Uhrzeit aus.
+
+`cron.php` liegt bewusst **nicht** in `public/` und ist deshalb über das
+Internet nicht erreichbar. Zusätzlich verweigert die Datei den Dienst, wenn
+sie nicht über die Kommandozeile aufgerufen wird.
+
+### Nachweis, dass der Lauf stattgefunden hat
+
+Jeder Lauf schreibt einen Eintrag in `storage/logs/laravel-*.log`:
+
+```
+Täglicher Lauf ausgeführt (cron.php).
+```
+
+Fehlt der Eintrag, wurde der Cronjob nicht ausgeführt. Ohne diesen Nachweis
+ließe sich nicht unterscheiden, ob nichts zu tun war oder der Auftrag gar
+nicht lief.
+
+### Mit Kommandozeile
+
+Dort gilt der reguläre Weg, siehe Abschnitt 4:
+
+```
+* * * * * cd /var/www/intranet && php artisan schedule:run >> /dev/null 2>&1
+```
+
 ## 6a. Serverfehler 500 auf jeder Seite
 
 Erster Verdacht ist die `.env`, nicht der Anwendungscode. Die Datei wird

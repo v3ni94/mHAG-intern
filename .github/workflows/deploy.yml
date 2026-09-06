@@ -83,7 +83,7 @@ jobs:
         # Ohne Zwischenspeicher trägt jede Übertragung das komplette
         # Verzeichnis vendor/ erneut, weil die Zeitstempel eines frischen
         # Auscheckens immer neu sind.
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: vendor
           key: vendor-php84-${{ hashFiles('composer.lock') }}

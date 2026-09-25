@@ -93,12 +93,20 @@ x-app-env: &app-env
 x-app-image: &app-image
   image: ${INTRANET_IMAGE_REGISTRY:-local}/mhag-intranet-app:${INTRANET_IMAGE_TAG:?INTRANET_IMAGE_TAG muss gesetzt sein}
 
+# Nur die Verzeichnisse, die Daten enthalten, liegen in einem Volume.
+# storage/framework und storage/logs bleiben bewusst im Container: die
+# uebersetzten Blade-Vorlagen werden beim Start jedes Containers neu erzeugt,
+# ein gemeinsames Volume wuerde den laufenden app-Container beim Start des
+# scheduler-Containers mitten im Betrieb treffen.
+x-app-volumes: &app-volumes
+  - dokumente:/var/www/html/storage/app
+  - sicherungen:/var/www/html/storage/backups
+
 x-php: &php
   <<: [*hardening, *app-image]
   environment:
     <<: *app-env
-  volumes:
-    - storage:/var/www/html/storage
+  volumes: *app-volumes
   depends_on:
     db:
       condition: service_healthy
@@ -136,8 +144,7 @@ services:
     command: ["php", "artisan", "migrate", "--force"]
     environment:
       <<: *app-env
-    volumes:
-      - storage:/var/www/html/storage
+    volumes: *app-volumes
     depends_on:
       db:
         condition: service_healthy
@@ -164,4 +171,5 @@ services:
 
 volumes:
   db-data:
-  storage:
+  dokumente:
+  sicherungen:

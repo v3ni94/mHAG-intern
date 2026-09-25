@@ -18,7 +18,7 @@ class BackupService
     /**
      * Backup ausführen.
      *
-     * @return array{success: bool, file: ?string, size: ?int, error: ?string, finished_at: string}
+     * @return array{success: bool, file: ?string, size: ?int, removed?: int, error: ?string, finished_at: string}
      */
     public function run(): array
     {
@@ -51,9 +51,12 @@ class BackupService
                 default => throw new \RuntimeException('Für den Datenbanktreiber "'.$driver.'" ist kein Backup-Verfahren hinterlegt.'),
             };
 
+            $file = $this->compressIfConfigured($file);
+
             $result['success'] = true;
             $result['file'] = basename($file);
             $result['size'] = filesize($file) ?: null;
+            $result['removed'] = $this->pruneOldBackups($path);
             $result['finished_at'] = now()->toDateTimeString();
         } catch (\Throwable $e) {
             $result['error'] = $e->getMessage();
@@ -119,6 +122,90 @@ class BackupService
         $full = $this->backupPath().DIRECTORY_SEPARATOR.$name;
 
         return is_file($full) ? $full : null;
+    }
+
+    /**
+     * Sicherung komprimieren, sofern eingestellt. Schlaegt das Komprimieren
+     * fehl, bleibt die unkomprimierte Datei bestehen: eine vorhandene
+     * Sicherung ist wichtiger als eine kleine.
+     */
+    private function compressIfConfigured(string $file): string
+    {
+        if (! config('backup.compress', true) || str_ends_with($file, '.gz')) {
+            return $file;
+        }
+
+        $ziel = $file.'.gz';
+        $quelle = @fopen($file, 'rb');
+
+        if ($quelle === false) {
+            return $file;
+        }
+
+        $senke = @gzopen($ziel, 'wb6');
+
+        if ($senke === false) {
+            fclose($quelle);
+
+            return $file;
+        }
+
+        $vollstaendig = true;
+
+        while (! feof($quelle)) {
+            $block = fread($quelle, 1024 * 512);
+            if ($block === false || ($block !== '' && gzwrite($senke, $block) === false)) {
+                $vollstaendig = false;
+                break;
+            }
+        }
+
+        fclose($quelle);
+        gzclose($senke);
+
+        if (! $vollstaendig || ! is_file($ziel)) {
+            @unlink($ziel);
+
+            return $file;
+        }
+
+        @unlink($file);
+
+        return $ziel;
+    }
+
+    /**
+     * Sicherungen entfernen, die aelter als die Aufbewahrungsdauer sind.
+     * Es werden ausschliesslich Dateien mit dem eigenen Namensmuster
+     * beruecksichtigt, nie fremde Dateien im selben Verzeichnis.
+     *
+     * @return int Zahl der entfernten Dateien
+     */
+    private function pruneOldBackups(string $path): int
+    {
+        $tage = (int) config('backup.retention_days', 30);
+
+        if ($tage <= 0 || ! is_dir($path)) {
+            return 0;
+        }
+
+        $grenze = now()->subDays($tage)->getTimestamp();
+        $entfernt = 0;
+
+        foreach (scandir($path) ?: [] as $name) {
+            if (! preg_match('/^backup-\\d{4}-\\d{2}-\\d{2}_\\d{6}\\.(sql|sqlite)(\\.gz)?$/', $name)) {
+                continue;
+            }
+
+            $voll = $path.DIRECTORY_SEPARATOR.$name;
+            $zeit = @filemtime($voll);
+
+            if ($zeit !== false && $zeit < $grenze && @unlink($voll)) {
+                $entfernt++;
+            }
+        }
+
+        return $entfernt;
     }
 
     private function backupSqlite(string $connection, string $path): string

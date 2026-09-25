@@ -27,7 +27,15 @@ if (! function_exists('format_datetime')) {
             $date = \Illuminate\Support\Carbon::parse($date);
         }
 
-        return $date->format('d.m.Y H:i');
+        /*
+         * Gespeichert wird in UTC, angezeigt in der Zeitzone des
+         * Geschaeftsbetriebs (config/app.php, display_timezone). Ohne diese
+         * Umrechnung stuenden in Anmeldeverlauf und Pruefspur im Sommer
+         * Uhrzeiten, die zwei Stunden zurueckliegen.
+         */
+        $zeitzone = (string) config('app.display_timezone', 'Europe/Berlin');
+
+        return $date->copy()->setTimezone($zeitzone)->format('d.m.Y H:i');
     }
 }
 

@@ -1,11 +1,22 @@
 # Nicht in den Bauzusammenhang des Abbilds uebernehmen.
 .git
 .github
+.claude
+
+# Zugangsdaten. Die .env.example bleibt als Nachschlagewerk enthalten.
 .env
 .env.*
 !.env.example
+
+# Wird im Abbild selbst erzeugt.
 vendor
 node_modules
+
+# Betriebsdaten des Servers. backups/ enthaelt unverschluesselte
+# Datenbankabzuege und darf unter keinen Umstaenden in ein Abbild gelangen.
+backups
+.deployed-tag
+.deployed-ref
 storage/logs/*
 storage/backups/*
 storage/framework/cache/data/*
@@ -17,7 +28,11 @@ bootstrap/cache/*
 public/storage
 public/build
 public/hot
+
+# Nicht Bestandteil des Betriebs.
 tests
+tools
+docs
 .phpunit.result.cache
 .phpunit.cache
 *.zip

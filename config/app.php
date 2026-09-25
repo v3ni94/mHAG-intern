@@ -69,6 +69,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Zeitzone der Anzeige
+    |--------------------------------------------------------------------------
+    |
+    | Gespeichert wird bewusst in UTC (siehe oben): das haelt die Daten
+    | unabhaengig von Sommerzeit und Serverstandort. Angezeigt und geplant
+    | wird dagegen in der Zeitzone des Geschaeftsbetriebs. format_datetime()
+    | und die geplanten Aufgaben in routes/console.php verwenden diesen Wert.
+    |
+    | APP_TIMEZONE wird als Rueckfall gelesen, weil bestehende Installationen
+    | diesen Eintrag bereits fuehren.
+    |
+    */
+
+    'display_timezone' => env('APP_DISPLAY_TIMEZONE', env('APP_TIMEZONE', 'Europe/Berlin')),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------
     |
@@ -99,11 +116,15 @@ return [
 
     'key' => env('APP_KEY'),
 
-    'previous_keys' => [
-        ...array_filter(
-            explode(',', (string) env('APP_PREVIOUS_KEYS', ''))
-        ),
-    ],
+    /*
+     * Mit Komma getrennt. Leerzeichen und leere Eintraege werden entfernt:
+     * ein versehentliches Leerzeichen hinter dem Komma wuerde sonst einen
+     * unbrauchbaren Schluessel erzeugen und die gesamte Anwendung anhalten.
+     */
+    'previous_keys' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('APP_PREVIOUS_KEYS', ''))
+    ), static fn (string $schluessel): bool => $schluessel !== '')),
 
     /*
     |--------------------------------------------------------------------------

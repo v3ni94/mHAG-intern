@@ -18,6 +18,12 @@
 #   SERVER_SSH_HOST        Adresse des Servers
 #   SERVER_SSH_USER        Benutzer für das Deployment
 #   SERVER_SSH_KEY         privater SSH-Schlüssel dieses Benutzers (OpenSSH)
+#                          ACHTUNG: Dieser Schlüssel öffnet eine Sitzung auf dem
+#                          Server, auf dem auch das CRM läuft. Er gehört einem
+#                          eigenen Deploy-Benutzer, dessen Rechte in
+#                          docs/DEPLOYMENT-SERVER.md, Abschnitt 11 beschrieben
+#                          sind. Nicht den Schlüssel eines persönlichen Kontos
+#                          und nicht den von root hinterlegen.
 #   SERVER_SSH_KNOWN_HOSTS Ausgabe von ssh-keyscan des Servers
 #   SERVER_DEPLOY_PATH     Verzeichnis des Klons, zum Beispiel /opt/mhag-intranet
 #   SERVER_SSH_PORT        optional, Vorgabe 22
@@ -83,14 +89,32 @@ jobs:
         run: |
           set -euo pipefail
           fehlt=""
-          for name in SSH_HOST SSH_USER SSH_KEY KNOWN_HOSTS DEPLOY_PATH; do
-            eval "wert=\${$name:-}"
-            [ -n "$wert" ] || fehlt="$fehlt $name"
-          done
+          [ -n "${SSH_HOST:-}" ]    || fehlt="$fehlt SERVER_SSH_HOST"
+          [ -n "${SSH_USER:-}" ]    || fehlt="$fehlt SERVER_SSH_USER"
+          [ -n "${SSH_KEY:-}" ]     || fehlt="$fehlt SERVER_SSH_KEY"
+          [ -n "${KNOWN_HOSTS:-}" ] || fehlt="$fehlt SERVER_SSH_KNOWN_HOSTS"
+          [ -n "${DEPLOY_PATH:-}" ] || fehlt="$fehlt SERVER_DEPLOY_PATH"
           if [ -n "$fehlt" ]; then
             echo "::error::Fehlende Secrets:$fehlt"
             exit 1
           fi
+          # Der Pfad wird spaeter in eine entfernte Kommandozeile eingesetzt.
+          # Ohne Pruefung liesse sich darueber ein beliebiger Befehl anhaengen.
+          case "$DEPLOY_PATH" in
+            /*) ;;
+            *) echo "::error::SERVER_DEPLOY_PATH muss ein absoluter Pfad sein."; exit 1 ;;
+          esac
+          case "$DEPLOY_PATH" in
+            *[!A-Za-z0-9._/-]*)
+              echo "::error::SERVER_DEPLOY_PATH enthaelt unzulaessige Zeichen."
+              exit 1 ;;
+          esac
+          # Der Benutzername geht ebenfalls unmaskiert in den ssh-Aufruf.
+          case "$SSH_USER" in
+            *[!A-Za-z0-9._-]*)
+              echo "::error::SERVER_SSH_USER enthaelt unzulaessige Zeichen."
+              exit 1 ;;
+          esac
 
       - name: SSH einrichten
         env:

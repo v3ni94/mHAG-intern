@@ -29,6 +29,7 @@ FROM php:8.4-fpm-alpine AS base
 RUN set -eux; \
     apk add --no-cache \
         freetype \
+        icu-data-full \
         icu-libs \
         libjpeg-turbo \
         libpng \
@@ -86,6 +87,7 @@ FROM base AS app
 
 COPY --from=vendor /var/www/html ./
 COPY infra/entrypoint.sh /usr/local/bin/intranet-entrypoint
+COPY infra/wait-for-db.php /usr/local/bin/intranet-wait-for-db.php
 
 RUN set -eux; \
     chmod +x /usr/local/bin/intranet-entrypoint; \
@@ -99,7 +101,6 @@ RUN set -eux; \
         storage/framework/views \
         storage/logs \
         bootstrap/cache; \
-    chmod -R u=rwX,go=rX .; \
     chown -R www-data:www-data storage bootstrap/cache; \
     chmod -R ug=rwX,o= storage bootstrap/cache
 

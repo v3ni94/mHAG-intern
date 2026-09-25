@@ -1,0 +1,23 @@
+# Nicht in den Bauzusammenhang des Abbilds uebernehmen.
+.git
+.github
+.env
+.env.*
+!.env.example
+vendor
+node_modules
+storage/logs/*
+storage/backups/*
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/app/documents/*
+storage/app/private/*
+bootstrap/cache/*
+public/storage
+public/build
+public/hot
+tests
+.phpunit.result.cache
+.phpunit.cache
+*.zip

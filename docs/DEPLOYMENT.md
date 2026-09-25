@@ -1,5 +1,12 @@
 # Deployment – intranet.mueller-holding.ag
 
+> **Hinweis (25.09.2026):** Für den Zielbetrieb auf dem eigenen Server der
+> Müller Holding AG, auf dem bereits das CRM läuft, gilt
+> `docs/DEPLOYMENT-SERVER.md` (Docker hinter dem vorhandenen Traefik). Diese
+> Anleitung beschreibt weiterhin die Einrichtung ohne Container und bleibt
+> als Grundlage für den Betrieb auf dem IONOS-Webspace gültig, bis dieser
+> abgeschaltet wird.
+
 Betrieb der Anwendung auf einem Linux-Server (Debian/Ubuntu) mit Nginx,
 PHP-FPM 8.4, MariaDB 10.11/11, Cron und Queue-Worker.
 

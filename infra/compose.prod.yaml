@@ -1,0 +1,55 @@
+# Produktions-Overlay fuer den Betreiberserver.
+#
+# Auf dem Server laeuft bereits Traefik (dort betreibt es auch das CRM). Der
+# Stapel bringt deshalb keinen eigenen Proxy mit, sondern haengt sich mit
+# Beschriftungen in das vorhandene Traefik-Netz ein. Es werden keine Ports
+# veroeffentlicht; die Datenbank ist von aussen nicht erreichbar.
+#
+#   docker compose -p mhag-intranet --env-file .env.prod \
+#     -f infra/compose.yaml -f infra/compose.prod.yaml up -d
+#
+# INTRANET_TRAEFIK_PREFIX haelt die Namen der Router und Middlewares eindeutig,
+# wenn spaeter eine zweite Umgebung (Test) auf demselben Traefik laeuft.
+
+x-prod: &prod
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+  db:
+    <<: *prod
+
+  app:
+    <<: *prod
+
+  scheduler:
+    <<: *prod
+
+  web:
+    <<: *prod
+    networks:
+      - default
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:?TRAEFIK_NETWORK muss gesetzt sein}"
+      - "traefik.http.middlewares.${INTRANET_TRAEFIK_PREFIX:-mhag-intranet}-headers.headers.frameDeny=true"
+      - "traefik.http.middlewares.${INTRANET_TRAEFIK_PREFIX:-mhag-intranet}-headers.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.${INTRANET_TRAEFIK_PREFIX:-mhag-intranet}-headers.headers.referrerPolicy=strict-origin-when-cross-origin"
+      - "traefik.http.middlewares.${INTRANET_TRAEFIK_PREFIX:-mhag-intranet}-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.${INTRANET_TRAEFIK_PREFIX:-mhag-intranet}-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.routers.${INTRANET_TRAEFIK_PREFIX:-mhag-intranet}.rule=Host(`${INTRANET_HOST:-intern.mueller-holding.ag}`)"
+      - "traefik.http.routers.${INTRANET_TRAEFIK_PREFIX:-mhag-intranet}.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.${INTRANET_TRAEFIK_PREFIX:-mhag-intranet}.tls.certresolver=${TRAEFIK_CERTRESOLVER:?TRAEFIK_CERTRESOLVER muss gesetzt sein}"
+      - "traefik.http.routers.${INTRANET_TRAEFIK_PREFIX:-mhag-intranet}.middlewares=${INTRANET_TRAEFIK_PREFIX:-mhag-intranet}-headers"
+      - "traefik.http.routers.${INTRANET_TRAEFIK_PREFIX:-mhag-intranet}.service=${INTRANET_TRAEFIK_PREFIX:-mhag-intranet}"
+      - "traefik.http.services.${INTRANET_TRAEFIK_PREFIX:-mhag-intranet}.loadbalancer.server.port=80"
+
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:?TRAEFIK_NETWORK muss gesetzt sein}

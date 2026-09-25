@@ -29,3 +29,9 @@ Thumbs.db
 # Backups
 /storage/backups/*
 !/storage/backups/.gitkeep
+
+# Server-Umgebungen (liegen nur auf dem Server)
+.env.prod
+.env.staging
+.deployed-tag
+/backups

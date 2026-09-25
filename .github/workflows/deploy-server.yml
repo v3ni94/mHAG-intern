@@ -1,0 +1,147 @@
+# ---------------------------------------------------------------------------
+# Übertragung der Anwendung auf den Betreiberserver (Docker, hinter Traefik)
+# ---------------------------------------------------------------------------
+# Löst das Deployment auf dem Server aus. Der Ablauf selbst liegt im
+# Repository unter scripts/server-deploy.sh und läuft auf dem Server:
+# Stand holen, Abbilder bauen, Datenbank sichern, Migration, Start.
+#
+# Der Läufer überträgt keine Dateien und hält keine Zugangsdaten der
+# Anwendung. Er stellt nur die SSH-Verbindung her.
+#
+# VORAUSSETZUNGEN AUF DEM SERVER
+#   - Klon des Repositories unter SERVER_DEPLOY_PATH (Deploy-Key, nur Lesen)
+#   - .env.prod mit Rechten 600 im selben Verzeichnis
+#   - Docker Engine mit Compose-Plugin, vorhandenes Traefik-Netz
+#   siehe docs/DEPLOYMENT-SERVER.md
+#
+# BENÖTIGTE SECRETS (Settings, Secrets and variables, Actions)
+#   SERVER_SSH_HOST        Adresse des Servers
+#   SERVER_SSH_USER        Benutzer für das Deployment
+#   SERVER_SSH_KEY         privater SSH-Schlüssel dieses Benutzers (OpenSSH)
+#   SERVER_SSH_KNOWN_HOSTS Ausgabe von ssh-keyscan des Servers
+#   SERVER_DEPLOY_PATH     Verzeichnis des Klons, zum Beispiel /opt/mhag-intranet
+#   SERVER_SSH_PORT        optional, Vorgabe 22
+#   SERVER_HEALTHCHECK_URL optional, zum Beispiel https://intern.mueller-holding.ag/up
+#
+# Bewusst kein Auslöser bei push: das Deployment auf den Server wird von Hand
+# angestoßen, solange der Webspace parallel läuft.
+# ---------------------------------------------------------------------------
+
+name: Deployment auf Server
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tag, Branch oder Commit, der ausgerollt wird"
+        required: true
+        type: string
+      bestaetigung:
+        description: "Zur Bestätigung denselben Wert noch einmal eintragen"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-produktion
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deployment auf den Betreiberserver
+    runs-on: ubuntu-24.04
+    environment: produktion
+    timeout-minutes: 45
+
+    steps:
+      - name: Eingaben prüfen
+        env:
+          REF: ${{ inputs.ref }}
+          BESTAETIGUNG: ${{ inputs.bestaetigung }}
+        run: |
+          set -euo pipefail
+          if [ "$REF" != "$BESTAETIGUNG" ]; then
+            echo "::error::Bestätigung stimmt nicht mit dem Stand überein."
+            exit 1
+          fi
+          case "$REF" in
+            *[!A-Za-z0-9._/-]*)
+              echo "::error::Unzulässige Zeichen im Stand."
+              exit 1 ;;
+          esac
+          echo "Stand: $REF"
+
+      - name: Zugangsdaten prüfen
+        env:
+          SSH_HOST: ${{ secrets.SERVER_SSH_HOST }}
+          SSH_USER: ${{ secrets.SERVER_SSH_USER }}
+          SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.SERVER_SSH_KNOWN_HOSTS }}
+          DEPLOY_PATH: ${{ secrets.SERVER_DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          fehlt=""
+          for name in SSH_HOST SSH_USER SSH_KEY KNOWN_HOSTS DEPLOY_PATH; do
+            eval "wert=\${$name:-}"
+            [ -n "$wert" ] || fehlt="$fehlt $name"
+          done
+          if [ -n "$fehlt" ]; then
+            echo "::error::Fehlende Secrets:$fehlt"
+            exit 1
+          fi
+
+      - name: SSH einrichten
+        env:
+          SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.SERVER_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Deployment auf dem Server ausführen
+        env:
+          SSH_HOST: ${{ secrets.SERVER_SSH_HOST }}
+          SSH_USER: ${{ secrets.SERVER_SSH_USER }}
+          SSH_PORT: ${{ secrets.SERVER_SSH_PORT }}
+          DEPLOY_PATH: ${{ secrets.SERVER_DEPLOY_PATH }}
+          REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes \
+              -p "${SSH_PORT:-22}" \
+              "$SSH_USER@$SSH_HOST" \
+              "cd '$DEPLOY_PATH' && scripts/server-deploy.sh '$REF'"
+
+      - name: Erreichbarkeit prüfen
+        env:
+          URL: ${{ secrets.SERVER_HEALTHCHECK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${URL:-}" ]; then
+            echo "Kein SERVER_HEALTHCHECK_URL hinterlegt, Prüfung übersprungen."
+            exit 0
+          fi
+          for versuch in 1 2 3 4 5; do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$URL" || true)"
+            if [ "$code" = "200" ]; then
+              echo "Erreichbar, HTTP $code"
+              exit 0
+            fi
+            echo "Versuch $versuch: HTTP $code"
+            sleep 10
+          done
+          echo "::error::Anwendung antwortet nicht mit HTTP 200."
+          exit 1
+
+      - name: Schlüssel entfernen
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

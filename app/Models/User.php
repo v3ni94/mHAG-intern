@@ -38,6 +38,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'two_factor_confirmed_at' => 'datetime',
             'last_login_at' => 'datetime',
+            'crm_linked_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
             'privacy_mode' => 'boolean',

@@ -22,7 +22,25 @@ class LoginController extends Controller
             return redirect()->route('dashboard');
         }
 
-        return view('auth.login');
+        return view('auth.login', [
+            'zentraleAnmeldung' => app(\App\Services\Sso\CrmSsoService::class)->istEingerichtet(),
+            'oertlicheAnmeldung' => $this->oertlicheAnmeldungMoeglich(),
+        ]);
+    }
+
+    /**
+     * Ist die zentrale Anmeldung über das CRM eingerichtet, läuft die
+     * Anmeldung dort. Die örtliche Anmeldung mit Kennwort bleibt als
+     * Notzugang bestehen, damit die Administration bei einer Störung des CRM
+     * handlungsfähig ist (Entscheidung Betreiber, 25.09.2026).
+     */
+    private function oertlicheAnmeldungMoeglich(): bool
+    {
+        if (! app(\App\Services\Sso\CrmSsoService::class)->istEingerichtet()) {
+            return true;
+        }
+
+        return (bool) config('sso.allow_local_login');
     }
 
     public function store(Request $request): RedirectResponse
@@ -31,6 +49,16 @@ class LoginController extends Controller
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
         ]);
+
+        if (! $this->oertlicheAnmeldungMoeglich()) {
+            AuditService::log('auth.notanmeldung_abgelehnt', null, [], [], [
+                'email' => $credentials['email'],
+            ]);
+
+            throw ValidationException::withMessages([
+                'email' => 'Die Anmeldung erfolgt zentral über das CRM.',
+            ]);
+        }
 
         $throttleKey = strtolower($credentials['email']).'|'.$request->ip();
 
@@ -68,6 +96,27 @@ class LoginController extends Controller
         }
 
         RateLimiter::clear($throttleKey);
+
+        /*
+         * Notzugang: Ist die zentrale Anmeldung eingerichtet, ist jede
+         * örtliche Anmeldung eine Ausnahme. Sie bleibt Administratoren
+         * vorbehalten und wird gesondert protokolliert.
+         */
+        if (app(\App\Services\Sso\CrmSsoService::class)->istEingerichtet()) {
+            if (! $user->hasRole('Administrator')) {
+                AuditService::log('auth.notanmeldung_abgelehnt', $user, [], [], [
+                    'grund' => 'Nur Administratoren duerfen den Notzugang verwenden.',
+                ]);
+
+                throw ValidationException::withMessages([
+                    'email' => 'Die Anmeldung erfolgt zentral über das CRM.',
+                ]);
+            }
+
+            AuditService::log('auth.notanmeldung', $user, [], [], [
+                'hinweis' => 'Örtliche Anmeldung mit Kennwort trotz eingerichteter zentraler Anmeldung.',
+            ]);
+        }
 
         // 2FA aktiv: Anmeldung erst nach erfolgreicher Challenge.
         if ($user->hasTwoFactorEnabled()) {

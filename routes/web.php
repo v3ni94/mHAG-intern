@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\CrmSsoController;
 use App\Http\Controllers\Auth\InvitationController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetController;
@@ -18,6 +19,15 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'show'])->name('login');
     Route::post('/login', [LoginController::class, 'store'])->middleware('throttle:10,1')->name('login.store');
+
+    /*
+     * Zentrale Anmeldung über das CRM (OpenID Connect). Die Rückkehradresse
+     * ist im CRM als redirect_uri hinterlegt und darf sich nicht ändern.
+     */
+    Route::get('/anmeldung/crm', [CrmSsoController::class, 'start'])
+        ->middleware('throttle:20,1')->name('sso.start');
+    Route::get('/anmeldung/crm/rueckkehr', [CrmSsoController::class, 'rueckkehr'])
+        ->middleware('throttle:20,1')->name('sso.callback');
 
     Route::get('/two-factor-challenge', [TwoFactorChallengeController::class, 'show'])->name('two-factor.challenge');
     Route::post('/two-factor-challenge', [TwoFactorChallengeController::class, 'store'])->middleware('throttle:10,1')->name('two-factor.challenge.store');
